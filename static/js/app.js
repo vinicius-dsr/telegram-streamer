@@ -2,6 +2,7 @@ class App {
     constructor() {
         this.currentChannel = null;
         this.currentTag = '';
+        this.currentGroup = '';
         this.allVideos = [];
         this.filteredVideos = [];
         this.channels = [];
@@ -150,10 +151,11 @@ class App {
     async switchChannel(channelId) {
         this.currentChannel = channelId;
         this.currentTag = '';
+        this.currentGroup = '';
         document.getElementById('search-input').value = '';
         if (channelId) {
             await this.loadVideos();
-            await this.loadTags();
+            this.renderFilterBar();
         } else {
             document.getElementById('video-grid').innerHTML = '<div class="empty-state"><p>Selecione um canal para comecar</p></div>';
         }
@@ -163,10 +165,9 @@ class App {
         if (!this.currentChannel) return;
         this.showLoading(true);
         try {
-            this.allVideos = await api.getVideos(this.currentChannel, '', 200, 0);
+            this.allVideos = await api.getVideos(this.currentChannel, '', 500, 0);
             this.filteredVideos = [...this.allVideos];
-            this.renderGrid(this.filteredVideos);
-            await this.loadTags();
+            this.applyFilters();
         } catch (e) {
             this.toast('Erro ao carregar videos: ' + e.message, 'error');
         } finally {
@@ -174,74 +175,180 @@ class App {
         }
     }
 
-    async loadTags() {
-        if (!this.currentChannel) return;
-        try {
-            const tags = await api.getTags(this.currentChannel);
-            const bar = document.querySelector('.tags-bar');
-            bar.innerHTML = '<button class="tag-btn active" data-tag="" onclick="app.filterTag(\'\')">Todos</button>';
-            tags.forEach(t => {
-                const btn = document.createElement('button');
-                btn.className = 'tag-btn';
-                btn.dataset.tag = t.tag;
-                btn.textContent = `#${t.tag} (${t.count})`;
-                btn.onclick = () => this.filterTag(t.tag);
-                bar.appendChild(btn);
-            });
-        } catch (e) {
-            console.error('Failed to load tags:', e);
+    getCurrentChannelConfig() {
+        if (!this.currentChannel) return null;
+        return this.channels.find(c => c.id === this.currentChannel) || null;
+    }
+
+    getGroupTags() {
+        const ch = this.getCurrentChannelConfig();
+        if (!ch || !ch.tag_groups || ch.tag_groups.length === 0) return null;
+        return ch.tag_groups;
+    }
+
+    renderFilterBar() {
+        const bar = document.querySelector('.tags-bar');
+        const groups = this.getGroupTags();
+        let html = '<button class="tag-btn active" data-tag="" data-group="" onclick="app.filterAll()">Todos</button>';
+
+        if (groups) {
+            html += '<span class="tag-separator">|</span>';
+            for (const g of groups) {
+                html += `<button class="tag-btn group-btn" data-group="${g.name}" onclick="app.filterGroup('${g.name.replace(/'/g, "\\'")}')">${g.name}</button>`;
+            }
         }
+
+        const tagsToShow = this.currentGroup ? this.getGroupTagsForFilter() : this.getAllTags();
+        if (tagsToShow.length > 0) {
+            if (groups) html += '<span class="tag-separator">|</span>';
+            for (const t of tagsToShow) {
+                const active = this.currentTag === t.tag ? ' active' : '';
+                html += `<button class="tag-btn${active}" data-tag="${t.tag}" onclick="app.filterTag('${t.tag}')">#${t.tag} (${t.count})</button>`;
+            }
+        }
+
+        bar.innerHTML = html;
+
+        if (this.currentGroup) {
+            bar.querySelectorAll('.group-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.group === this.currentGroup);
+            });
+        }
+    }
+
+    getAllTags() {
+        const tags = {};
+        for (const v of this.allVideos) {
+            if (v.tags) {
+                for (const t of v.tags) {
+                    tags[t] = (tags[t] || 0) + 1;
+                }
+            }
+        }
+        return Object.entries(tags)
+            .map(([tag, count]) => ({ tag, count }))
+            .sort((a, b) => b.count - a.count);
+    }
+
+    getGroupTagsForFilter() {
+        const ch = this.getCurrentChannelConfig();
+        if (!ch || !ch.tag_groups) return [];
+        const group = ch.tag_groups.find(g => g.name === this.currentGroup);
+        if (!group) return [];
+
+        const tags = {};
+        for (const v of this.allVideos) {
+            if (v.tags && v.tags.some(t => group.tags.includes(t))) {
+                for (const t of v.tags) {
+                    if (group.tags.includes(t)) {
+                        tags[t] = (tags[t] || 0) + 1;
+                    }
+                }
+            }
+        }
+        return Object.entries(tags)
+            .map(([tag, count]) => ({ tag, count }))
+            .sort((a, b) => b.count - a.count);
+    }
+
+    filterAll() {
+        this.currentTag = '';
+        this.currentGroup = '';
+        this.filteredVideos = [...this.allVideos];
+        this.renderFilterBar();
+        this.renderGrid(this.filteredVideos);
+    }
+
+    filterGroup(groupName) {
+        this.currentGroup = groupName;
+        this.currentTag = '';
+        const ch = this.getCurrentChannelConfig();
+        const group = ch && ch.tag_groups ? ch.tag_groups.find(g => g.name === groupName) : null;
+        if (group) {
+            this.filteredVideos = this.allVideos.filter(v =>
+                v.tags && v.tags.some(t => group.tags.includes(t))
+            );
+        } else {
+            this.filteredVideos = [...this.allVideos];
+        }
+        this.renderFilterBar();
+        this.renderGrid(this.filteredVideos);
     }
 
     filterTag(tag) {
         this.currentTag = tag;
-        document.querySelectorAll('.tag-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.tag === tag);
-        });
         if (!tag) {
+            if (this.currentGroup) {
+                this.filterGroup(this.currentGroup);
+                return;
+            }
             this.filteredVideos = [...this.allVideos];
         } else {
-            this.filteredVideos = this.allVideos.filter(v =>
-                v.tags && v.tags.includes(tag)
-            );
+            let base = [...this.allVideos];
+            if (this.currentGroup) {
+                const ch = this.getCurrentChannelConfig();
+                const group = ch && ch.tag_groups ? ch.tag_groups.find(g => g.name === this.currentGroup) : null;
+                if (group) {
+                    base = base.filter(v => v.tags && v.tags.some(t => group.tags.includes(t)));
+                }
+            }
+            this.filteredVideos = base.filter(v => v.tags && v.tags.includes(tag));
         }
+        this.renderFilterBar();
         this.renderGrid(this.filteredVideos);
     }
 
     search(query) {
         const q = query.toLowerCase().trim();
         if (!q) {
-            this.filteredVideos = this.currentTag
-                ? this.allVideos.filter(v => v.tags && v.tags.includes(this.currentTag))
-                : [...this.allVideos];
-        } else {
-            const base = this.currentTag
-                ? this.allVideos.filter(v => v.tags && v.tags.includes(this.currentTag))
-                : this.allVideos;
-            this.filteredVideos = base.filter(v =>
-                (v.title || '').toLowerCase().includes(q) ||
-                (v.caption || '').toLowerCase().includes(q)
-            );
+            this.applyFilters();
+            return;
         }
+        let base = [...this.allVideos];
+        if (this.currentGroup) {
+            const ch = this.getCurrentChannelConfig();
+            const group = ch && ch.tag_groups ? ch.tag_groups.find(g => g.name === this.currentGroup) : null;
+            if (group) {
+                base = base.filter(v => v.tags && v.tags.some(t => group.tags.includes(t)));
+            }
+        }
+        if (this.currentTag) {
+            base = base.filter(v => v.tags && v.tags.includes(this.currentTag));
+        }
+        this.filteredVideos = base.filter(v =>
+            (v.title || '').toLowerCase().includes(q) ||
+            (v.caption || '').toLowerCase().includes(q)
+        );
         this.renderGrid(this.filteredVideos);
     }
 
-    getCurrentChannelConfig() {
-        if (!this.currentChannel) return null;
-        return this.channels.find(c => c.id === this.currentChannel) || null;
+    applyFilters() {
+        let result = [...this.allVideos];
+        if (this.currentGroup) {
+            const ch = this.getCurrentChannelConfig();
+            const group = ch && ch.tag_groups ? ch.tag_groups.find(g => g.name === this.currentGroup) : null;
+            if (group) {
+                result = result.filter(v => v.tags && v.tags.some(t => group.tags.includes(t)));
+            }
+        }
+        if (this.currentTag) {
+            result = result.filter(v => v.tags && v.tags.includes(this.currentTag));
+        }
+        this.filteredVideos = result;
+        this.renderGrid(this.filteredVideos);
     }
 
     renderGrid(videos) {
         const grid = document.getElementById('video-grid');
-        const ch = this.getCurrentChannelConfig();
-        const groups = ch && ch.tag_groups && ch.tag_groups.length > 0 ? ch.tag_groups : null;
+        const groups = this.getGroupTags();
+        const showSections = groups && !this.currentGroup && !this.currentTag;
 
         if (!videos || videos.length === 0) {
             grid.innerHTML = '<div class="empty-state"><p>Nenhum video encontrado</p></div>';
             return;
         }
 
-        if (!groups) {
+        if (!showSections) {
             grid.innerHTML = videos.map(v => this.renderCard(v)).join('');
             return;
         }

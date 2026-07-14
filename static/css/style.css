@@ -350,6 +350,26 @@ html, body {
     color: #fff;
 }
 
+.tag-btn.group-btn {
+    background: var(--bg-secondary);
+    border-color: var(--text-dim);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.tag-btn.group-btn.active {
+    background: #b81d24;
+    border-color: #b81d24;
+}
+
+.tag-separator {
+    color: var(--text-dim);
+    font-size: 18px;
+    padding: 0 4px;
+    user-select: none;
+    align-self: center;
+}
+
 .tag-badge {
     display: inline-block;
     padding: 2px 10px;

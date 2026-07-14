@@ -46,6 +46,7 @@ async def create_channel(request: Request):
     name_line = data.get("name_line", "ultima")
     tag_groups = data.get("tag_groups", [])
     ch = add_channel(channel_id, name, tags, name_line, tag_groups)
+    _get_service(request).invalidate_cache()
     return ch
 
 
@@ -57,13 +58,15 @@ async def edit_channel(channel_id: str, request: Request):
     updated = update_channel(channel_id, **data)
     if not updated:
         raise HTTPException(status_code=404, detail="Channel not found")
+    _get_service(request).invalidate_cache(channel_id)
     return updated
 
 
 @router.delete("/channel/{channel_id:path}")
-async def delete_channel(channel_id: str):
+async def delete_channel(channel_id: str, request: Request):
     if not remove_channel(channel_id):
         raise HTTPException(status_code=404, detail="Channel not found")
+    _get_service(request).invalidate_cache(channel_id)
     return {"ok": True}
 
 
