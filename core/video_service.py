@@ -105,8 +105,8 @@ def _format_duration(seconds: int) -> str:
     m = (seconds % 3600) // 60
     s = seconds % 60
     if h > 0:
-        return f"{h}:{m:02d}:{s:02d}"
-    return f"{m}:{s:02d}"
+        return f"{int(h)}:{int(m):02d}:{int(s):02d}"
+    return f"{int(m)}:{int(s):02d}"
 
 
 def _format_size(size_bytes: int) -> str:
