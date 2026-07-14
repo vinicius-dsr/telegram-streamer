@@ -122,22 +122,41 @@ def _format_size(size_bytes: int) -> str:
 
 
 class VideoService:
-    def __init__(self, client: TelegramClient):
+    def __init__(self, client: Optional[TelegramClient] = None):
         self.client = client
         self._entity_cache: Dict[str, Any] = {}
+
+    def set_client(self, client: TelegramClient):
+        self.client = client
+
+    async def warmup(self):
+        """Pre-resolve all configured channels to avoid FloodWait on first request."""
+        if not self.client:
+            return
+        for ch in get_channels():
+            cid = ch.get("id", "")
+            if cid and cid not in self._entity_cache:
+                try:
+                    entity = await self.client.get_input_entity(cid)
+                    self._entity_cache[cid] = entity
+                except Exception:
+                    pass
 
     async def _resolve_entity(self, channel_id: str):
         if channel_id in self._entity_cache:
             return self._entity_cache[channel_id]
+        if not self.client:
+            raise HTTPException(status_code=503, detail="Not connected to Telegram")
         try:
             entity = await self.client.get_input_entity(channel_id)
             self._entity_cache[channel_id] = entity
             return entity
         except FloodWaitError as e:
-            await asyncio.sleep(e.seconds + 1)
-            entity = await self.client.get_input_entity(channel_id)
-            self._entity_cache[channel_id] = entity
-            return entity
+            raise HTTPException(
+                status_code=429,
+                detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                headers={"Retry-After": str(e.seconds)},
+            )
 
     async def _get_message(self, msg_id: int, channel_id: str):
         entity = await self._resolve_entity(channel_id)
@@ -181,20 +200,27 @@ class VideoService:
         search_tag = f"#{tag}" if tag and not tag.startswith("#") else tag
         messages = []
         count = 0
-        async for msg in self.client.iter_messages(entity, search=search_tag):
-            if not msg.message or not msg.media:
-                continue
-            video_info = _get_video_info(msg)
-            if not video_info:
-                continue
-            if tag and tag not in (msg.message or ""):
-                continue
-            count += 1
-            if count <= offset:
-                continue
-            messages.append(self._build_metadata(msg, channel_id))
-            if len(messages) >= limit:
-                break
+        try:
+            async for msg in self.client.iter_messages(entity, search=search_tag):
+                if not msg.message or not msg.media:
+                    continue
+                video_info = _get_video_info(msg)
+                if not video_info:
+                    continue
+                if tag and tag not in (msg.message or ""):
+                    continue
+                count += 1
+                if count <= offset:
+                    continue
+                messages.append(self._build_metadata(msg, channel_id))
+                if len(messages) >= limit:
+                    break
+        except FloodWaitError as e:
+            raise HTTPException(
+                status_code=429,
+                detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                headers={"Retry-After": str(e.seconds)},
+            )
         return messages
 
     async def get_video_metadata(self, msg_id: int, channel_id: str) -> Dict[str, Any]:
@@ -204,14 +230,17 @@ class VideoService:
     async def list_tags(self, channel_id: str) -> List[Dict[str, Any]]:
         entity = await self._resolve_entity(channel_id)
         tag_counts: Dict[str, int] = {}
-        async for msg in self.client.iter_messages(entity):
-            if not msg.message or not msg.media:
-                continue
-            video_info = _get_video_info(msg)
-            if not video_info:
-                continue
-            for tag in extract_tags(msg.message):
-                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        try:
+            async for msg in self.client.iter_messages(entity):
+                if not msg.message or not msg.media:
+                    continue
+                video_info = _get_video_info(msg)
+                if not video_info:
+                    continue
+                for tag in extract_tags(msg.message):
+                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        except FloodWaitError:
+            pass
         return [
             {"tag": tag, "count": count}
             for tag, count in sorted(tag_counts.items(), key=lambda x: -x[1])

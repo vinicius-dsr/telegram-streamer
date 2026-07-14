@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.telegram_client import TelegramManager
+from core.video_service import VideoService
 from core.config_manager import load_config, session_exists
 from routes.api import router as api_router
 from routes.auth import router as auth_router
@@ -28,6 +29,9 @@ async def lifespan(app: FastAPI):
                 await mgr.disconnect()
         except Exception:
             pass
+    app.state.video_service = VideoService(mgr.get_client() if mgr.connected else None)
+    if mgr.connected:
+        await app.state.video_service.warmup()
     yield
     if mgr.connected:
         await mgr.disconnect()

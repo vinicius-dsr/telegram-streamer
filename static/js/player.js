@@ -8,6 +8,13 @@ class VideoPlayer {
         this.dateEl = document.getElementById('player-date');
         this.captionEl = document.getElementById('player-caption');
         this.currentData = null;
+
+        this.video.addEventListener('error', () => {
+            if (this.currentData) {
+                app.toast('Erro ao reproduzir video. Tente novamente em alguns segundos.', 'error');
+                app.goBack();
+            }
+        });
     }
 
     play(videoData, channel) {

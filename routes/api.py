@@ -21,10 +21,10 @@ def _get_manager(request: Request) -> TelegramManager:
 
 
 def _get_service(request: Request) -> VideoService:
-    mgr = _get_manager(request)
-    if not mgr.connected or not mgr.authorized:
+    svc = request.app.state.video_service
+    if not svc.client:
         raise HTTPException(status_code=401, detail="Not connected to Telegram")
-    return VideoService(mgr.get_client())
+    return svc
 
 
 @router.get("/channels")

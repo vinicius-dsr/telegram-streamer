@@ -15,6 +15,12 @@ def _get_manager(request: Request) -> TelegramManager:
     return request.app.state.telegram_manager
 
 
+def _sync_video_service(request: Request):
+    mgr = _get_manager(request)
+    if mgr.connected:
+        request.app.state.video_service.set_client(mgr.get_client())
+
+
 @router.get("/status")
 async def auth_status(request: Request):
     mgr = _get_manager(request)
@@ -48,6 +54,7 @@ async def login(request: Request):
     if mgr.authorized:
         cfg.update({"api_id": api_id, "api_hash": api_hash, "phone": phone})
         save_config(cfg)
+        _sync_video_service(request)
         return {"status": "authorized", "username": mgr.get_username()}
     try:
         await mgr.send_code(phone)
@@ -78,6 +85,7 @@ async def verify_code(request: Request):
         raise HTTPException(status_code=500, detail=f"Invalid code: {e}")
     cfg.update({"phone": use_phone})
     save_config(cfg)
+    _sync_video_service(request)
     return {"status": "authorized", "username": mgr.get_username()}
 
 
@@ -95,6 +103,7 @@ async def verify_2fa(request: Request):
     except Exception as e:
         await mgr.disconnect()
         raise HTTPException(status_code=500, detail=f"Invalid password: {e}")
+    _sync_video_service(request)
     return {"status": "authorized", "username": mgr.get_username()}
 
 
@@ -105,5 +114,6 @@ async def reuse_session(request: Request):
         await mgr.disconnect()
     success = await mgr.try_reuse_downloader_session()
     if success:
+        _sync_video_service(request)
         return {"status": "authorized", "username": mgr.get_username()}
     raise HTTPException(status_code=404, detail="No valid session found from Telegram-Downloader-Tools")
