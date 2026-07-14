@@ -9,10 +9,24 @@ from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename
 
-from .config_manager import get_channel, get_channels, load_config
+from .config_manager import get_channel, get_channels, load_config, update_channel
 
 
 TAG_PATTERN = re.compile(r"#(\d+)")
+
+
+def _entity_to_channel_id(entity) -> Optional[str]:
+    """Extract a stable channel ID string from a resolved Telethon entity."""
+    peer = getattr(entity, "channel_id", None)
+    if peer is not None:
+        return str(peer)
+    peer = getattr(entity, "chat_id", None)
+    if peer is not None:
+        return str(peer)
+    peer = getattr(entity, "user_id", None)
+    if peer is not None:
+        return str(peer)
+    return None
 
 
 def extract_tags(text: str) -> List[str]:
@@ -130,26 +144,53 @@ class VideoService:
         self.client = client
 
     async def warmup(self):
-        """Pre-resolve all configured channels to avoid FloodWait on first request."""
+        """Pre-resolve all configured channels. For invite links, resolve once and
+        cache under the resolved numeric ID so future lookups skip the API."""
         if not self.client:
             return
         for ch in get_channels():
             cid = ch.get("id", "")
-            if cid and cid not in self._entity_cache:
-                try:
-                    entity = await self.client.get_input_entity(cid)
-                    self._entity_cache[cid] = entity
-                except Exception:
-                    pass
+            if not cid:
+                continue
+            resolved_id = ch.get("resolved_id")
+            if resolved_id and resolved_id in self._entity_cache:
+                self._entity_cache[cid] = self._entity_cache[resolved_id]
+                continue
+            if cid in self._entity_cache:
+                continue
+            try:
+                entity = await self.client.get_input_entity(cid)
+                self._entity_cache[cid] = entity
+                if resolved_id:
+                    self._entity_cache[resolved_id] = entity
+                else:
+                    await self._maybe_persist_resolved_id(cid, entity)
+            except FloodWaitError:
+                pass
+            except Exception:
+                pass
 
     async def _resolve_entity(self, channel_id: str):
         if channel_id in self._entity_cache:
             return self._entity_cache[channel_id]
         if not self.client:
             raise HTTPException(status_code=503, detail="Not connected to Telegram")
+
+        resolve_id = channel_id
+        if channel_id.startswith("https://"):
+            ch_cfg = get_channel(channel_id)
+            if ch_cfg and ch_cfg.get("resolved_id"):
+                resolve_id = ch_cfg["resolved_id"]
+                if resolve_id in self._entity_cache:
+                    self._entity_cache[channel_id] = self._entity_cache[resolve_id]
+                    return self._entity_cache[resolve_id]
+
         try:
-            entity = await self.client.get_input_entity(channel_id)
+            entity = await self.client.get_input_entity(resolve_id)
             self._entity_cache[channel_id] = entity
+            self._entity_cache[resolve_id] = entity
+            if resolve_id == channel_id:
+                await self._maybe_persist_resolved_id(channel_id, entity)
             return entity
         except FloodWaitError as e:
             raise HTTPException(
@@ -157,6 +198,14 @@ class VideoService:
                 detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
                 headers={"Retry-After": str(e.seconds)},
             )
+
+    async def _maybe_persist_resolved_id(self, original_id: str, entity):
+        """If original_id is an invite link, save the resolved numeric ID in config."""
+        if original_id.startswith("https://") and not original_id.startswith("@"):
+            resolved = _entity_to_channel_id(entity)
+            if resolved:
+                update_channel(original_id, resolved_id=resolved)
+                self._entity_cache[resolved] = entity
 
     async def _get_message(self, msg_id: int, channel_id: str):
         entity = await self._resolve_entity(channel_id)
