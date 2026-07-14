@@ -137,12 +137,18 @@ def _format_size(size_bytes: int) -> str:
 
 
 class VideoService:
-    _CACHE_TTL = 300  # 5 minutes
+    _VIDEO_CACHE_TTL = 300   # 5 minutes
+    _MSG_CACHE_TTL = 300     # 5 minutes
+    _THUMB_CACHE_TTL = 1800  # 30 minutes
+    _MAX_CONCURRENT = 5
 
     def __init__(self, client: Optional[TelegramClient] = None):
         self.client = client
         self._entity_cache: Dict[str, Any] = {}
         self._video_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+        self._msg_cache: Dict[int, Tuple[float, Any]] = {}
+        self._thumb_cache: Dict[int, Tuple[float, bytes]] = {}
+        self._sem = asyncio.Semaphore(self._MAX_CONCURRENT)
 
     def set_client(self, client: TelegramClient):
         self.client = client
@@ -190,7 +196,8 @@ class VideoService:
                     return self._entity_cache[resolve_id]
 
         try:
-            entity = await self.client.get_input_entity(resolve_id)
+            async with self._sem:
+                entity = await self.client.get_input_entity(resolve_id)
             self._entity_cache[channel_id] = entity
             self._entity_cache[resolve_id] = entity
             if resolve_id == channel_id:
@@ -212,8 +219,25 @@ class VideoService:
                 self._entity_cache[resolved] = entity
 
     async def _get_message(self, msg_id: int, channel_id: str):
+        now = time.time()
+        if msg_id in self._msg_cache:
+            cached_at, cached_msg = self._msg_cache[msg_id]
+            if now - cached_at < self._MSG_CACHE_TTL:
+                if not cached_msg or not cached_msg.media:
+                    raise HTTPException(status_code=404, detail="Video not found")
+                return cached_msg
+
         entity = await self._resolve_entity(channel_id)
-        msg = await self.client.get_messages(entity, ids=msg_id)
+        try:
+            async with self._sem:
+                msg = await self.client.get_messages(entity, ids=msg_id)
+        except FloodWaitError as e:
+            raise HTTPException(
+                status_code=429,
+                detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                headers={"Retry-After": str(e.seconds)},
+            )
+        self._msg_cache[msg_id] = (now, msg)
         if not msg or not msg.media:
             raise HTTPException(status_code=404, detail="Video not found")
         return msg
@@ -252,19 +276,20 @@ class VideoService:
         now = time.time()
         if cache_key in self._video_cache:
             cached_at, cached_videos = self._video_cache[cache_key]
-            if now - cached_at < self._CACHE_TTL:
+            if now - cached_at < self._VIDEO_CACHE_TTL:
                 return self._filter_videos(cached_videos, tag, limit, offset)
 
         entity = await self._resolve_entity(channel_id)
         videos = []
         try:
-            async for msg in self.client.iter_messages(entity):
-                if not msg.message or not msg.media:
-                    continue
-                video_info = _get_video_info(msg)
-                if not video_info:
-                    continue
-                videos.append(self._build_metadata(msg, channel_id))
+            async with self._sem:
+                async for msg in self.client.iter_messages(entity, limit=200):
+                    if not msg.message or not msg.media:
+                        continue
+                    video_info = _get_video_info(msg)
+                    if not video_info:
+                        continue
+                    videos.append(self._build_metadata(msg, channel_id))
         except FloodWaitError as e:
             raise HTTPException(
                 status_code=429,
@@ -321,10 +346,18 @@ class VideoService:
             content_length = end - start + 1
 
             async def generate():
-                async for chunk in self.client.iter_download(
-                    msg.media, offset=start, request_size=content_length
-                ):
-                    yield chunk
+                try:
+                    async with self._sem:
+                        async for chunk in self.client.iter_download(
+                            msg.media, offset=start, request_size=content_length
+                        ):
+                            yield chunk
+                except FloodWaitError as e:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"FloodWait: aguarde {e.seconds} segundos",
+                        headers={"Retry-After": str(e.seconds)},
+                    )
 
             return StreamingResponse(
                 generate(),
@@ -338,8 +371,16 @@ class VideoService:
             )
 
         async def generate():
-            async for chunk in self.client.iter_download(msg.media):
-                yield chunk
+            try:
+                async with self._sem:
+                    async for chunk in self.client.iter_download(msg.media):
+                        yield chunk
+            except FloodWaitError as e:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"FloodWait: aguarde {e.seconds} segundos",
+                    headers={"Retry-After": str(e.seconds)},
+                )
 
         return StreamingResponse(
             generate(),
@@ -352,6 +393,12 @@ class VideoService:
         )
 
     async def get_thumbnail(self, msg_id: int, channel_id: str) -> bytes:
+        now = time.time()
+        if msg_id in self._thumb_cache:
+            cached_at, cached_bytes = self._thumb_cache[msg_id]
+            if now - cached_at < self._THUMB_CACHE_TTL:
+                return cached_bytes
+
         msg = await self._get_message(msg_id, channel_id)
         if not msg.media:
             raise HTTPException(status_code=404, detail="No media found")
@@ -374,5 +421,14 @@ class VideoService:
         thumb_location = getattr(thumb, "location", None)
         if not thumb_location:
             raise HTTPException(status_code=404, detail="Thumbnail not accessible")
-        result = await self.client._download_file(thumb_location)
+        try:
+            async with self._sem:
+                result = await self.client._download_file(thumb_location)
+        except FloodWaitError as e:
+            raise HTTPException(
+                status_code=429,
+                detail=f"FloodWait: aguarde {e.seconds} segundos",
+                headers={"Retry-After": str(e.seconds)},
+            )
+        self._thumb_cache[msg_id] = (now, result)
         return result
