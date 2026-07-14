@@ -349,7 +349,7 @@ class App {
         }
 
         if (!showSections) {
-            grid.innerHTML = videos.map(v => this.renderCard(v)).join('');
+            grid.innerHTML = '<div class="video-grid">' + videos.map(v => this.renderCard(v)).join('') + '</div>';
             return;
         }
 
