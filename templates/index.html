@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Streamer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="screen active">
+        <div class="login-container">
+            <div class="login-header">
+                <h1 class="logo">STREAMER</h1>
+                <p class="subtitle">Assista seus videos do Telegram no navegador</p>
+            </div>
+
+            <!-- Reuse Session -->
+            <div id="login-reuse" class="login-card" style="display:none">
+                <h3>Sessao encontrada</h3>
+                <p>Uma sessao do Telegram-Downloader-Tools foi detectada.</p>
+                <button class="btn btn-primary btn-full" onclick="app.reuseSession()">Reusar sessao</button>
+                <div class="divider"><span>ou</span></div>
+            </div>
+
+            <!-- Login Form -->
+            <div class="login-card">
+                <div id="login-step-api">
+                    <div class="form-group">
+                        <label>API ID</label>
+                        <input type="text" id="login-api-id" placeholder="Ex: 12345678">
+                    </div>
+                    <div class="form-group">
+                        <label>API Hash</label>
+                        <input type="text" id="login-api-hash" placeholder="Seu API Hash">
+                    </div>
+                    <div class="form-group">
+                        <label>Telefone</label>
+                        <input type="text" id="login-phone" placeholder="+5511999999999">
+                    </div>
+                    <button class="btn btn-primary btn-full" onclick="app.startLogin()">Conectar</button>
+                </div>
+
+                <div id="login-step-code" style="display:none">
+                    <div class="form-group">
+                        <label>Codigo de verificacao</label>
+                        <input type="text" id="login-code" placeholder="Digite o codigo">
+                    </div>
+                    <button class="btn btn-primary btn-full" onclick="app.sendCode()">Enviar codigo</button>
+                </div>
+
+                <div id="login-step-2fa" style="display:none">
+                    <div class="form-group">
+                        <label>Senha 2FA</label>
+                        <input type="password" id="login-2fa" placeholder="Digite sua senha">
+                    </div>
+                    <button class="btn btn-primary btn-full" onclick="app.send2FA()">Confirmar</button>
+                </div>
+
+                <div id="login-error" class="error-msg" style="display:none"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app-screen" class="screen">
+        <!-- HEADER -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="logo-sm">STREAMER</h1>
+                <div class="channel-selector">
+                    <select id="channel-select" onchange="app.switchChannel(this.value)">
+                        <option value="">Selecionar canal</option>
+                    </select>
+                    <button class="btn-icon" onclick="app.showSettings()" title="Configuracoes">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Buscar titulo..." oninput="app.search(this.value)">
+                </div>
+            </div>
+        </header>
+
+        <!-- BROWSE PAGE -->
+        <div id="browse-page" class="page active">
+            <!-- TAG FILTERS -->
+            <div class="tags-bar">
+                <button class="tag-btn active" data-tag="" onclick="app.filterTag('')">Todos</button>
+            </div>
+
+            <!-- VIDEO GRID -->
+            <div id="video-grid" class="video-grid">
+                <div class="empty-state" id="empty-state">
+                    <p>Selecione um canal para comecar</p>
+                </div>
+            </div>
+
+            <!-- LOADING -->
+            <div id="loading" class="loading" style="display:none">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <!-- PLAYER PAGE -->
+        <div id="player-page" class="page">
+            <div class="player-container">
+                <div class="player-header">
+                    <button class="btn-back" onclick="app.goBack()">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+                </div>
+                <div class="player-wrapper">
+                    <video id="video-player" controls autoplay>
+                        Seu navegador nao suporta video.
+                    </video>
+                </div>
+                <div class="player-info">
+                    <h2 id="player-title"></h2>
+                    <div class="player-meta">
+                        <span id="player-tag" class="tag-badge"></span>
+                        <span id="player-duration"></span>
+                        <span id="player-size"></span>
+                        <span id="player-date"></span>
+                    </div>
+                    <p id="player-caption" class="player-caption"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SETTINGS PAGE -->
+        <div id="settings-page" class="page">
+            <div class="settings-container">
+                <div class="settings-header">
+                    <button class="btn-back" onclick="app.showBrowse()">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                        Voltar
+                    </button>
+                    <h2>Configuracoes</h2>
+                </div>
+
+                <div class="settings-card">
+                    <h3>Conexao</h3>
+                    <div id="connection-status" class="status-badge status-disconnected">
+                        Desconectado
+                    </div>
+                    <div id="connection-user" class="connection-user"></div>
+                </div>
+
+                <div class="settings-card">
+                    <h3>Canais</h3>
+                    <div id="channels-list" class="channels-list"></div>
+                    <div class="add-channel-form">
+                        <input type="text" id="new-channel-id" placeholder="Link ou @usuario do canal">
+                        <input type="text" id="new-channel-name" placeholder="Nome do canal">
+                        <input type="text" id="new-channel-tags" placeholder="Tags (ex: 223, 224)">
+                        <select id="new-channel-name-line">
+                            <option value="ultima">Ultima linha = titulo</option>
+                            <option value="primeira">Primeira linha = titulo</option>
+                            <option value="segunda">Segunda linha = titulo</option>
+                            <option value="terceira">Terceira linha = titulo</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="app.addChannel()">Adicionar canal</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATIONS -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/player.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
