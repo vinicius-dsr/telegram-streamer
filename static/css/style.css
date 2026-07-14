@@ -37,7 +37,7 @@ html, body {
 .screen { display: none; }
 .screen.active { display: flex; }
 .page { display: none; }
-.page.active { display: block; }
+.page.active { display: block; width: 100%; }
 
 /* ===== LOGIN ===== */
 #login-screen {
