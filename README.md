@@ -1,6 +1,8 @@
-# Telegram Streamer
+<p align="center">
+  <img src="static/img/logo.png" alt="Telegram Streamer" width="300">
+</p>
 
-Assista seus videos do Telegram diretamente no navegador, com uma interface estilo Netflix.
+<h3 align="center">Assista seus videos do Telegram diretamente no navegador</h3>
 
 ## Funcionalidades
 
