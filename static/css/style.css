@@ -59,10 +59,8 @@ html, body {
 }
 
 .logo {
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: 6px;
-    color: var(--accent);
+    height: 48px;
+    width: auto;
 }
 
 .subtitle {
@@ -265,10 +263,8 @@ html, body {
 }
 
 .logo-sm {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 4px;
-    color: var(--accent);
+    height: 36px;
+    width: auto;
 }
 
 .channel-selector {
