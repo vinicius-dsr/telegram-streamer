@@ -361,10 +361,13 @@ class VideoService:
         if video and video.thumbs:
             thumbs = video.thumbs
         elif doc:
-            for attr in getattr(doc, "attributes", []):
-                if hasattr(attr, "thumbs") and attr.thumbs:
-                    thumbs = attr.thumbs
-                    break
+            if doc.thumbs:
+                thumbs = doc.thumbs
+            else:
+                for attr in getattr(doc, "attributes", []):
+                    if hasattr(attr, "thumbs") and attr.thumbs:
+                        thumbs = attr.thumbs
+                        break
         if not thumbs:
             raise HTTPException(status_code=404, detail="No thumbnail available")
         thumb = thumbs[0]
