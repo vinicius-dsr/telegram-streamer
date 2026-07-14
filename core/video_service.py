@@ -1,3 +1,4 @@
+import asyncio
 import io
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -5,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from telethon import TelegramClient
+from telethon.errors import FloodWaitError
 from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename
 
 from .config_manager import get_channel, get_channels, load_config
@@ -122,9 +124,20 @@ def _format_size(size_bytes: int) -> str:
 class VideoService:
     def __init__(self, client: TelegramClient):
         self.client = client
+        self._entity_cache: Dict[str, Any] = {}
 
     async def _resolve_entity(self, channel_id: str):
-        return await self.client.get_input_entity(channel_id)
+        if channel_id in self._entity_cache:
+            return self._entity_cache[channel_id]
+        try:
+            entity = await self.client.get_input_entity(channel_id)
+            self._entity_cache[channel_id] = entity
+            return entity
+        except FloodWaitError as e:
+            await asyncio.sleep(e.seconds + 1)
+            entity = await self.client.get_input_entity(channel_id)
+            self._entity_cache[channel_id] = entity
+            return entity
 
     async def _get_message(self, msg_id: int, channel_id: str):
         entity = await self._resolve_entity(channel_id)
