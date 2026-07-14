@@ -12,7 +12,7 @@ from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename
 from .config_manager import get_channel, get_channels, load_config, update_channel
 
 
-TAG_PATTERN = re.compile(r"#(\d+)")
+TAG_PATTERN = re.compile(r"#([A-Za-z0-9]+)")
 
 
 def _entity_to_channel_id(entity) -> Optional[str]:
