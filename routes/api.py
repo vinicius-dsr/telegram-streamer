@@ -11,6 +11,7 @@ from core.config_manager import (
     update_channel,
     get_channel,
     load_config,
+    parse_tags_input,
 )
 
 router = APIRouter(prefix="/api")
@@ -41,15 +42,18 @@ async def create_channel(request: Request):
     if not channel_id.startswith("@") and not channel_id.startswith("https"):
         channel_id = f"@{channel_id}"
     name = data.get("name", channel_id)
-    tags = data.get("tags", [])
+    tags = parse_tags_input(data.get("tags_raw", "")) or data.get("tags", [])
     name_line = data.get("name_line", "ultima")
-    ch = add_channel(channel_id, name, tags, name_line)
+    tag_groups = data.get("tag_groups", [])
+    ch = add_channel(channel_id, name, tags, name_line, tag_groups)
     return ch
 
 
 @router.put("/channel/{channel_id:path}")
 async def edit_channel(channel_id: str, request: Request):
     data = await request.json()
+    if "tags_raw" in data:
+        data["tags"] = parse_tags_input(data.pop("tags_raw"))
     updated = update_channel(channel_id, **data)
     if not updated:
         raise HTTPException(status_code=404, detail="Channel not found")

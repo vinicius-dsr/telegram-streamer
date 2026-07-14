@@ -17,7 +17,6 @@
                 <p class="subtitle">Assista seus videos do Telegram no navegador</p>
             </div>
 
-            <!-- Reuse Session -->
             <div id="login-reuse" class="login-card" style="display:none">
                 <h3>Sessao encontrada</h3>
                 <p>Uma sessao do Telegram-Downloader-Tools foi detectada.</p>
@@ -25,7 +24,6 @@
                 <div class="divider"><span>ou</span></div>
             </div>
 
-            <!-- Login Form -->
             <div class="login-card">
                 <div id="login-step-api">
                     <div class="form-group">
@@ -66,7 +64,6 @@
 
     <!-- MAIN APP -->
     <div id="app-screen" class="screen">
-        <!-- HEADER -->
         <header class="header">
             <div class="header-left">
                 <h1 class="logo-sm">STREAMER</h1>
@@ -90,19 +87,16 @@
 
         <!-- BROWSE PAGE -->
         <div id="browse-page" class="page active">
-            <!-- TAG FILTERS -->
             <div class="tags-bar">
                 <button class="tag-btn active" data-tag="" onclick="app.filterTag('')">Todos</button>
             </div>
-
-            <!-- VIDEO GRID -->
-            <div id="video-grid" class="video-grid">
-                <div class="empty-state" id="empty-state">
-                    <p>Selecione um canal para comecar</p>
+            <div class="content-container">
+                <div id="video-grid" class="video-grid">
+                    <div class="empty-state" id="empty-state">
+                        <p>Selecione um canal para comecar</p>
+                    </div>
                 </div>
             </div>
-
-            <!-- LOADING -->
             <div id="loading" class="loading" style="display:none">
                 <div class="spinner"></div>
             </div>
@@ -152,25 +146,35 @@
 
                 <div class="settings-card">
                     <h3>Conexao</h3>
-                    <div id="connection-status" class="status-badge status-disconnected">
-                        Desconectado
-                    </div>
+                    <div id="connection-status" class="status-badge status-disconnected">Desconectado</div>
                     <div id="connection-user" class="connection-user"></div>
                 </div>
 
                 <div class="settings-card">
                     <h3>Canais</h3>
                     <div id="channels-list" class="channels-list"></div>
-                    <div class="add-channel-form">
+                    <div class="add-channel-form" id="add-channel-form">
                         <input type="text" id="new-channel-id" placeholder="Link ou @usuario do canal">
                         <input type="text" id="new-channel-name" placeholder="Nome do canal">
-                        <input type="text" id="new-channel-tags" placeholder="Tags (ex: 223, 224)">
+                        <div>
+                            <textarea id="new-channel-tags" placeholder="Tags: #F47 #F48 #F49 (espaco ou virgula)" rows="2"></textarea>
+                            <div class="form-hint">Separe por espaco ou virgula. O # e opcional.</div>
+                        </div>
                         <select id="new-channel-name-line">
                             <option value="ultima">Ultima linha = titulo</option>
                             <option value="primeira">Primeira linha = titulo</option>
                             <option value="segunda">Segunda linha = titulo</option>
                             <option value="terceira">Terceira linha = titulo</option>
                         </select>
+                        <div class="tag-groups-builder" id="add-groups-builder">
+                            <h4>Grupos de Tags (opcional)</h4>
+                            <div class="existing-groups-list" id="add-groups-list"></div>
+                            <div class="tag-group-row">
+                                <input type="text" class="group-name-input" placeholder="Nome do grupo">
+                                <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
+                                <button class="btn-remove-group" onclick="app.addGroupRow(this)" title="Adicionar grupo">+</button>
+                            </div>
+                        </div>
                         <button class="btn btn-primary" onclick="app.addChannel()">Adicionar canal</button>
                     </div>
                 </div>
@@ -178,7 +182,45 @@
         </div>
     </div>
 
-    <!-- TOAST NOTIFICATIONS -->
+    <!-- EDIT CHANNEL MODAL -->
+    <div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)app.closeEditModal()">
+        <div class="modal">
+            <h2>Editar Canal</h2>
+            <input type="hidden" id="edit-channel-id">
+            <div class="form-group">
+                <label>Nome</label>
+                <input type="text" id="edit-channel-name">
+            </div>
+            <div class="form-group">
+                <label>Tags</label>
+                <textarea id="edit-channel-tags" rows="2"></textarea>
+                <div class="form-hint">Separe por espaco ou virgula. O # e opcional.</div>
+            </div>
+            <div class="form-group">
+                <label>Linha do titulo</label>
+                <select id="edit-channel-name-line">
+                    <option value="ultima">Ultima linha = titulo</option>
+                    <option value="primeira">Primeira linha = titulo</option>
+                    <option value="segunda">Segunda linha = titulo</option>
+                    <option value="terceira">Terceira linha = titulo</option>
+                </select>
+            </div>
+            <div class="tag-groups-builder">
+                <h4>Grupos de Tags</h4>
+                <div class="existing-groups-list" id="edit-groups-list"></div>
+                <div class="tag-group-row">
+                    <input type="text" class="group-name-input" placeholder="Nome do grupo">
+                    <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
+                    <button class="btn-remove-group" onclick="app.addEditGroupRow(this)" title="Adicionar grupo">+</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="app.closeEditModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="app.saveEditChannel()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container" class="toast-container"></div>
 
     <script src="/static/js/api.js"></script>

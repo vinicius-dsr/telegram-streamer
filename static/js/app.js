@@ -150,6 +150,7 @@ class App {
     async switchChannel(channelId) {
         this.currentChannel = channelId;
         this.currentTag = '';
+        document.getElementById('search-input').value = '';
         if (channelId) {
             await this.loadVideos();
             await this.loadTags();
@@ -225,20 +226,62 @@ class App {
         this.renderGrid(this.filteredVideos);
     }
 
+    getCurrentChannelConfig() {
+        if (!this.currentChannel) return null;
+        return this.channels.find(c => c.id === this.currentChannel) || null;
+    }
+
     renderGrid(videos) {
         const grid = document.getElementById('video-grid');
-        const empty = document.getElementById('empty-state');
+        const ch = this.getCurrentChannelConfig();
+        const groups = ch && ch.tag_groups && ch.tag_groups.length > 0 ? ch.tag_groups : null;
+
         if (!videos || videos.length === 0) {
-            grid.innerHTML = '';
-            if (empty) {
-                empty.style.display = '';
-                grid.appendChild(empty);
-            } else {
-                grid.innerHTML = '<div class="empty-state"><p>Nenhum video encontrado</p></div>';
-            }
+            grid.innerHTML = '<div class="empty-state"><p>Nenhum video encontrado</p></div>';
             return;
         }
-        grid.innerHTML = videos.map(v => this.renderCard(v)).join('');
+
+        if (!groups) {
+            grid.innerHTML = '<div class="video-grid">' + videos.map(v => this.renderCard(v)).join('') + '</div>';
+            return;
+        }
+
+        const grouped = {};
+        const ungrouped = [];
+        const taggedVideos = new Set();
+
+        for (const g of groups) {
+            grouped[g.name] = [];
+            for (const v of videos) {
+                if (v.tags && v.tags.some(t => g.tags.includes(t))) {
+                    grouped[g.name].push(v);
+                    taggedVideos.add(v.msg_id);
+                }
+            }
+        }
+
+        for (const v of videos) {
+            if (!taggedVideos.has(v.msg_id)) {
+                ungrouped.push(v);
+            }
+        }
+
+        let html = '';
+        for (const g of groups) {
+            const gVideos = grouped[g.name];
+            if (gVideos.length === 0) continue;
+            html += `<div class="group-section">
+                <h3 class="group-title">${g.name}</h3>
+                <div class="video-grid">${gVideos.map(v => this.renderCard(v)).join('')}</div>
+            </div>`;
+        }
+        if (ungrouped.length > 0) {
+            html += `<div class="group-section">
+                <h3 class="group-title">Outros</h3>
+                <div class="video-grid">${ungrouped.map(v => this.renderCard(v)).join('')}</div>
+            </div>`;
+        }
+        grid.innerHTML = html;
     }
 
     renderCard(video) {
@@ -321,34 +364,105 @@ class App {
             container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Nenhum canal configurado</p>';
             return;
         }
-        container.innerHTML = this.channels.map(ch => `
+        container.innerHTML = this.channels.map(ch => {
+            const tags = (ch.tags || []).slice(0, 8);
+            const extra = (ch.tags || []).length - 8;
+            const tagsHtml = tags.map(t => `<span class="tag-badge">#${t}</span>`).join('') + (extra > 0 ? `<span class="tag-badge">+${extra}</span>` : '');
+            const groups = (ch.tag_groups || []).map(g => g.name).join(', ');
+            return `
             <div class="channel-item">
                 <div class="channel-info">
                     <div class="channel-name">${ch.name || ch.id}</div>
-                    <div class="channel-id">${ch.id} &middot; Tags: ${(ch.tags || []).join(', ') || 'nenhuma'}</div>
+                    <div class="channel-id">${ch.id}</div>
+                    ${tagsHtml ? `<div class="channel-tags">${tagsHtml}</div>` : ''}
+                    ${groups ? `<div class="channel-id" style="margin-top:2px">Grupos: ${groups}</div>` : ''}
                 </div>
                 <div class="channel-actions">
-                    <button class="btn btn-danger" onclick="app.removeChannel('${ch.id}')">Remover</button>
+                    <button class="btn btn-secondary btn-sm" onclick="app.openEditModal('${ch.id}')">Editar</button>
+                    <button class="btn btn-danger btn-sm" onclick="app.removeChannel('${ch.id}')">Remover</button>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+    }
+
+    parseTags(raw) {
+        if (!raw) return [];
+        return raw.split(/[\s,]+/).map(t => t.replace(/^#/, '').trim()).filter(Boolean);
+    }
+
+    collectGroups(containerId) {
+        const container = document.getElementById(containerId);
+        const rows = container.querySelectorAll('.tag-group-row');
+        const groups = [];
+        rows.forEach(row => {
+            const name = row.querySelector('.group-name-input').value.trim();
+            const tagsRaw = row.querySelector('.group-tags-input').value.trim();
+            if (name && tagsRaw) {
+                groups.push({ name, tags: this.parseTags(tagsRaw) });
+            }
+        });
+        return groups;
+    }
+
+    renderExistingGroups(containerId, groups) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        if (!groups || groups.length === 0) return;
+        groups.forEach((g, i) => {
+            const row = document.createElement('div');
+            row.className = 'tag-group-row';
+            row.innerHTML = `
+                <input type="text" class="group-name-input" value="${g.name}">
+                <input type="text" class="group-tags-input" value="${(g.tags || []).map(t => '#' + t).join(' ')}">
+                <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    addGroupRow(btn) {
+        const builder = btn.closest('.tag-groups-builder');
+        const list = builder.querySelector('.existing-groups-list');
+        const newRow = document.createElement('div');
+        newRow.className = 'tag-group-row';
+        newRow.innerHTML = `
+            <input type="text" class="group-name-input" placeholder="Nome do grupo">
+            <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
+            <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
+        `;
+        list.appendChild(newRow);
+    }
+
+    addEditGroupRow(btn) {
+        const builder = btn.closest('.tag-groups-builder');
+        const list = builder.querySelector('.existing-groups-list');
+        const newRow = document.createElement('div');
+        newRow.className = 'tag-group-row';
+        newRow.innerHTML = `
+            <input type="text" class="group-name-input" placeholder="Nome do grupo">
+            <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
+            <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
+        `;
+        list.appendChild(newRow);
     }
 
     async addChannel() {
         const id = document.getElementById('new-channel-id').value.trim();
         const name = document.getElementById('new-channel-name').value.trim();
-        const tagsStr = document.getElementById('new-channel-tags').value.trim();
+        const tagsRaw = document.getElementById('new-channel-tags').value.trim();
         const nameLine = document.getElementById('new-channel-name-line').value;
         if (!id) {
             this.toast('Informe o link ou @usuario do canal', 'error');
             return;
         }
-        const tags = tagsStr ? tagsStr.split(',').map(t => t.replace('#', '').trim()).filter(Boolean) : [];
+        const tags = this.parseTags(tagsRaw);
+        const tagGroups = this.collectGroups('add-groups-builder');
         try {
-            await api.addChannel({ id, name: name || id, tags, name_line: nameLine });
+            await api.addChannel({ id, name: name || id, tags_raw: tagsRaw, tags, name_line: nameLine, tag_groups: tagGroups });
             document.getElementById('new-channel-id').value = '';
             document.getElementById('new-channel-name').value = '';
             document.getElementById('new-channel-tags').value = '';
+            document.getElementById('add-groups-list').innerHTML = '';
             this.toast('Canal adicionado!', 'success');
             await this.loadChannels();
         } catch (e) {
@@ -356,7 +470,45 @@ class App {
         }
     }
 
+    openEditModal(channelId) {
+        const ch = this.channels.find(c => c.id === channelId);
+        if (!ch) return;
+        document.getElementById('edit-channel-id').value = ch.id;
+        document.getElementById('edit-channel-name').value = ch.name || '';
+        const tagsStr = (ch.tags || []).map(t => '#' + t).join(' ');
+        document.getElementById('edit-channel-tags').value = tagsStr;
+        document.getElementById('edit-channel-name-line').value = ch.name_line || 'ultima';
+        this.renderExistingGroups('edit-groups-list', ch.tag_groups || []);
+        document.getElementById('edit-modal').classList.add('active');
+    }
+
+    closeEditModal() {
+        document.getElementById('edit-modal').classList.remove('active');
+    }
+
+    async saveEditChannel() {
+        const channelId = document.getElementById('edit-channel-id').value;
+        const name = document.getElementById('edit-channel-name').value.trim();
+        const tagsRaw = document.getElementById('edit-channel-tags').value.trim();
+        const nameLine = document.getElementById('edit-channel-name-line').value;
+        const tagGroups = this.collectGroups('edit-groups-list');
+        try {
+            await api.updateChannel(channelId, {
+                name: name || channelId,
+                tags_raw: tagsRaw,
+                name_line: nameLine,
+                tag_groups: tagGroups,
+            });
+            this.closeEditModal();
+            this.toast('Canal atualizado!', 'success');
+            await this.loadChannels();
+        } catch (e) {
+            this.toast('Erro ao salvar: ' + e.message, 'error');
+        }
+    }
+
     async removeChannel(channelId) {
+        if (!confirm('Remover este canal?')) return;
         try {
             await api.removeChannel(channelId);
             this.toast('Canal removido', 'info');

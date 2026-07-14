@@ -11,6 +11,7 @@
     --border: #333;
     --radius: 6px;
     --header-height: 64px;
+    --content-max: 1400px;
 }
 
 * {
@@ -102,7 +103,7 @@ html, body {
     letter-spacing: 0.5px;
 }
 
-.form-group input, .form-group select {
+.form-group input, .form-group select, .form-group textarea {
     width: 100%;
     padding: 12px 14px;
     background: var(--bg-input);
@@ -114,9 +115,20 @@ html, body {
     transition: border-color 0.2s;
 }
 
-.form-group input:focus, .form-group select:focus {
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
     outline: none;
     border-color: var(--accent);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.form-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
 }
 
 .divider {
@@ -192,6 +204,11 @@ html, body {
 
 .btn-danger:hover {
     background: rgba(255, 107, 107, 0.1);
+}
+
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 12px;
 }
 
 .btn-full { width: 100%; }
@@ -303,6 +320,8 @@ html, body {
 /* ===== TAGS BAR ===== */
 .tags-bar {
     padding: calc(var(--header-height) + 16px) 24px 12px;
+    max-width: var(--content-max);
+    margin: 0 auto;
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
@@ -342,11 +361,33 @@ html, body {
 }
 
 /* ===== VIDEO GRID ===== */
+.content-container {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
 .video-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 16px;
-    padding: 12px 24px 40px;
+    padding: 12px 0 40px;
+}
+
+.group-section {
+    margin-bottom: 32px;
+}
+
+.group-title {
+    font-size: 20px;
+    font-weight: 700;
+    padding: 12px 0 8px;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: 16px;
+}
+
+.group-section .video-grid {
+    padding: 0 0 8px;
 }
 
 .video-card {
@@ -507,7 +548,7 @@ html, body {
 /* ===== SETTINGS ===== */
 .settings-container {
     padding: calc(var(--header-height) + 24px) 24px 40px;
-    max-width: 700px;
+    max-width: 800px;
     margin: 0 auto;
 }
 
@@ -565,29 +606,52 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: var(--bg-card);
     border-radius: var(--radius);
     margin-bottom: 8px;
+    gap: 12px;
 }
 
 .channel-item .channel-info {
     flex: 1;
+    min-width: 0;
 }
 
 .channel-item .channel-name {
     font-weight: 600;
     font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .channel-item .channel-id {
     color: var(--text-muted);
     font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.channel-item .channel-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.channel-item .channel-tags .tag-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    background: var(--bg-input);
+    color: var(--text-muted);
 }
 
 .channel-item .channel-actions {
     display: flex;
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .add-channel-form {
@@ -599,7 +663,8 @@ html, body {
 }
 
 .add-channel-form input,
-.add-channel-form select {
+.add-channel-form select,
+.add-channel-form textarea {
     padding: 10px 12px;
     background: var(--bg-input);
     border: 1px solid var(--border);
@@ -610,9 +675,114 @@ html, body {
 }
 
 .add-channel-form input:focus,
-.add-channel-form select:focus {
-    outline: none;
+.add-channel-form select:focus,
+.add-channel-form textarea:focus {
     border-color: var(--accent);
+    outline: none;
+}
+
+/* ===== TAG GROUPS BUILDER ===== */
+.tag-groups-builder {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 4px;
+}
+
+.tag-groups-builder h4 {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tag-group-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.tag-group-row input {
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.tag-group-row input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.tag-group-row .group-name-input {
+    width: 140px;
+    flex-shrink: 0;
+}
+
+.tag-group-row .group-tags-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.tag-group-row .btn-remove-group {
+    background: transparent;
+    border: none;
+    color: #ff6b6b;
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.tag-group-row .btn-remove-group:hover {
+    color: #ff4444;
+}
+
+.existing-groups-list {
+    margin-bottom: 8px;
+}
+
+/* ===== MODAL ===== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    padding: 28px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal h2 {
+    font-size: 20px;
+    margin-bottom: 20px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    justify-content: flex-end;
 }
 
 /* ===== LOADING ===== */
@@ -700,6 +870,12 @@ html, body {
 }
 
 /* ===== RESPONSIVE ===== */
+@media (max-width: 1024px) {
+    .video-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+}
+
 @media (max-width: 768px) {
     .header {
         padding: 0 12px;
@@ -721,10 +897,13 @@ html, body {
         width: 200px;
     }
 
+    .content-container {
+        padding: 0 12px;
+    }
+
     .video-grid {
         grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         gap: 10px;
-        padding: 12px;
     }
 
     .tags-bar {
@@ -739,6 +918,28 @@ html, body {
     .settings-container {
         padding-left: 12px;
         padding-right: 12px;
+    }
+
+    .channel-item {
+        flex-wrap: wrap;
+    }
+
+    .channel-item .channel-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .modal {
+        padding: 20px;
+        margin: 12px;
+    }
+
+    .tag-group-row {
+        flex-wrap: wrap;
+    }
+
+    .tag-group-row .group-name-input {
+        width: 100%;
     }
 }
 
@@ -755,5 +956,9 @@ html, body {
 
     .video-grid {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .header-right {
+        display: none;
     }
 }

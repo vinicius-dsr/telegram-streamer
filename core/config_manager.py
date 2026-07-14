@@ -67,13 +67,29 @@ def copy_session_to_project(src_path: str, session_name: Optional[str] = None) -
     return dest
 
 
-def add_channel(channel_id: str, name: str, tags: List[str], name_line: str = "ultima") -> Dict[str, Any]:
+def parse_tags_input(raw: str) -> List[str]:
+    import re
+    if not raw:
+        return []
+    tokens = re.split(r"[\s,]+", raw.strip())
+    seen = set()
+    result = []
+    for t in tokens:
+        t = t.strip().lstrip("#")
+        if t and t not in seen:
+            seen.add(t)
+            result.append(t)
+    return result
+
+
+def add_channel(channel_id: str, name: str, tags: List[str], name_line: str = "ultima", tag_groups: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     cfg = load_config()
     channel = {
         "id": channel_id,
         "name": name,
         "tags": tags,
         "name_line": name_line,
+        "tag_groups": tag_groups or [],
         "added_at": datetime.now().strftime("%Y-%m-%d"),
     }
     existing = [c for c in cfg["channels"] if c["id"] == channel_id]
