@@ -537,7 +537,7 @@ class App {
 
     addGroupRow(btn) {
         const builder = btn.closest('.tag-groups-builder');
-        const list = builder.querySelector('.existing-groups-list');
+        const addRow = btn.closest('.tag-group-row');
         const newRow = document.createElement('div');
         newRow.className = 'tag-group-row';
         newRow.innerHTML = `
@@ -545,12 +545,12 @@ class App {
             <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
             <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
         `;
-        list.appendChild(newRow);
+        builder.insertBefore(newRow, addRow);
     }
 
     addEditGroupRow(btn) {
         const builder = btn.closest('.tag-groups-builder');
-        const list = builder.querySelector('.existing-groups-list');
+        const addRow = btn.closest('.tag-group-row');
         const newRow = document.createElement('div');
         newRow.className = 'tag-group-row';
         newRow.innerHTML = `
@@ -558,7 +558,7 @@ class App {
             <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
             <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
         `;
-        list.appendChild(newRow);
+        builder.insertBefore(newRow, addRow);
     }
 
     async addChannel() {
