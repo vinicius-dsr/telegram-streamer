@@ -49,7 +49,7 @@ def _get_video_info(msg: Any) -> Optional[Dict[str, Any]]:
     doc = getattr(media, "document", None)
     if not video and not doc:
         return None
-    if video:
+    if video and hasattr(video, "duration"):
         return {
             "size": video.size,
             "duration": video.duration or 0,
@@ -57,6 +57,8 @@ def _get_video_info(msg: Any) -> Optional[Dict[str, Any]]:
             "height": video.h or 0,
             "mime_type": video.mime_type or "video/mp4",
         }
+    if not doc and video:
+        doc = video
     if doc:
         mime = getattr(doc, "mime_type", "") or ""
         if not mime.startswith("video"):
