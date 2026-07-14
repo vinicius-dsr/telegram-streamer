@@ -377,16 +377,24 @@ class App {
         for (const g of groups) {
             const gVideos = grouped[g.name];
             if (gVideos.length === 0) continue;
-            html += `<div class="group-section">
-                <h3 class="group-title">${g.name}</h3>
+            html += `<details class="group-dropdown" open>
+                <summary class="group-summary">
+                    <span class="group-chevron"></span>
+                    ${g.name}
+                    <span class="group-count">(${gVideos.length} videos)</span>
+                </summary>
                 <div class="video-grid">${gVideos.map(v => this.renderCard(v)).join('')}</div>
-            </div>`;
+            </details>`;
         }
         if (ungrouped.length > 0) {
-            html += `<div class="group-section">
-                <h3 class="group-title">Outros</h3>
+            html += `<details class="group-dropdown">
+                <summary class="group-summary">
+                    <span class="group-chevron"></span>
+                    Outros
+                    <span class="group-count">(${ungrouped.length} videos)</span>
+                </summary>
                 <div class="video-grid">${ungrouped.map(v => this.renderCard(v)).join('')}</div>
-            </div>`;
+            </details>`;
         }
         grid.innerHTML = html;
     }

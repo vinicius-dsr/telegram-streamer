@@ -394,20 +394,61 @@ html, body {
     padding: 12px 0 40px;
 }
 
-.group-section {
-    margin-bottom: 32px;
+.group-dropdown {
+    margin-bottom: 8px;
 }
 
-.group-title {
-    font-size: 20px;
+.group-dropdown[open] {
+    margin-bottom: 24px;
+}
+
+.group-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 18px;
     font-weight: 700;
-    padding: 12px 0 8px;
-    border-bottom: 2px solid var(--accent);
-    margin-bottom: 16px;
+    list-style: none;
+    user-select: none;
+    transition: background 0.2s;
 }
 
-.group-section .video-grid {
-    padding: 0 0 8px;
+.group-summary::-webkit-details-marker {
+    display: none;
+}
+
+.group-summary:hover {
+    background: var(--bg-card);
+}
+
+.group-chevron {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-left: 6px solid var(--text);
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+
+.group-dropdown[open] > .group-summary .group-chevron {
+    transform: rotate(90deg);
+}
+
+.group-count {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.group-dropdown .video-grid {
+    padding: 16px 0 0;
 }
 
 .video-card {
