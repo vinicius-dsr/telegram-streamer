@@ -53,7 +53,7 @@ Na primeira execucao, voce precisara:
 Os dados sao salvos em `config.json`.
 
 <p align="center">
-   <img src="static/img/tela-de-login.png" alt="Telegram Streamer Tela de Login" width="300">
+   <img src="static/img/tela-de-login.png" alt="Telegram Streamer Tela de Login">
 </p>
 
 ### Canais
@@ -72,6 +72,14 @@ Formato de entrada (aceita espacos ou virgulas):
 ```
 
 Grupos permitem organizar videos por secao com titulo, exibidos como dropdowns na tela principal.
+
+<p align="center">
+   <img src="static/img/canais.png" alt="Telegram Streamer Tela de Login">
+</p>
+
+<p align="center">
+   <img src="static/img/tela-de-streamer.png" alt="Telegram Streamer Tela de Login">
+</p>
 
 ## Estrutura
 
