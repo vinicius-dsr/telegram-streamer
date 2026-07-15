@@ -123,5 +123,5 @@ Telegram-Streamer/
 | `/api/tags` | GET | Listar tags |
 
 
-## Gostou do que viu? [Me pague um café](https://viniciusdev.site/coffee)
+## Gostou do projeto? [Me pague um café](https://viniciusdev.site/coffee)
 
