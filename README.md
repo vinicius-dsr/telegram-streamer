@@ -53,7 +53,7 @@ Na primeira execucao, voce precisara:
 Os dados sao salvos em `config.json`.
 
 <p align="center">
-   <img src="static/img/login.png" alt="Telegram Streamer Tela de Login" width="300">
+   <img src="static/img/tela-de-login.png" alt="Telegram Streamer Tela de Login" width="300">
 </p>
 
 ### Canais
