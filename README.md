@@ -122,6 +122,6 @@ Telegram-Streamer/
 | `/api/thumbnail/{id}` | GET | Thumbnail do video |
 | `/api/tags` | GET | Listar tags |
 
-## Licenca
 
-MIT
+## Gostou do que viu? Me pague um café
+viniciusdev.site/coffee
