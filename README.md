@@ -86,7 +86,7 @@ Grupos permitem organizar videos por secao com titulo, exibidos como dropdowns n
 Assista a um exemplo de uso abaixo. O video foi gravado durante uma sessão real de streaming.
 
 <p align="center">
-  <a href="static/video/demo.mp4">
+  <a href="https://x8y84tt318.ufs.sh/f/P5hQbUHBvh3fGnWpJjzJcdCRh85otfZe7iWEK0BQsIOVDnrl">
     ▶ Clique aqui para assistir ao video demo
   </a>
 </p>
