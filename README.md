@@ -85,7 +85,11 @@ Grupos permitem organizar videos por secao com titulo, exibidos como dropdowns n
 
 Assista a um exemplo de uso abaixo. O video foi gravado durante uma sessão real de streaming.
 
-![video](static/video/demo.mp4)
+<p align="center">
+  <a href="static/video/demo.mp4">
+    ▶ Clique aqui para assistir ao video demo
+  </a>
+</p>
 
 
 ## Estrutura
