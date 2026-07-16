@@ -162,3 +162,19 @@ async def prefetch_video(
     if not channel:
         raise HTTPException(status_code=400, detail="No channel specified")
     return await service.prefetch_video(msg_id, channel)
+
+
+@router.get("/progress/{msg_id}")
+async def get_progress(msg_id: int, request: Request):
+    service = _get_service(request)
+    progress = service.get_progress(msg_id)
+    return {"time": progress}
+
+
+@router.post("/progress/{msg_id}")
+async def save_progress(msg_id: int, request: Request):
+    service = _get_service(request)
+    data = await request.json()
+    current_time = data.get("time", 0)
+    service.save_progress(msg_id, current_time)
+    return {"ok": True}

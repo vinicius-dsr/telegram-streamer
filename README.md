@@ -7,6 +7,7 @@
 ## Funcionalidades
 
 - **Streaming direto** — videos sao reproduzidos do Telegram sem download, com suporte a Range requests (seek/progressivo)
+- **Pre-carregamento** — primeiros 2MB sao baixados ao passar o mouse, acelerando o playback
 - **Thumbnails** — miniaturas geradas automaticamente dos videos
 - **Canais** — suporta multiplos canais, incluindo links de convite (`t.me/+hash`)
 - **Tag groups** — organize videos em grupos com nome (ex: "Iniciando com Next.js", "App Router")
@@ -14,6 +15,7 @@
 - **Sessao compartilhada** — reutiliza a sessao do Telegram-Downloader-Tools
 - **2FA** — suporte completo a autenticacao em duas etapas
 - **Cache** — videos sao cacheados por 5 minutos, eliminando escaneamentos repetidos
+- **Retomar playback** — lembra onde voce parou de assistir e retoma automaticamente
 - **Responsivo** — layout adaptavel para desktop, tablet e mobile
 
 ## Stack
@@ -132,6 +134,9 @@ Telegram-Streamer/
 | `/api/stream/{id}` | GET | Streaming do video |
 | `/api/thumbnail/{id}` | GET | Thumbnail do video |
 | `/api/tags` | GET | Listar tags |
+| `/api/prefetch/{id}` | GET | Pre-baixar inicio do video |
+| `/api/progress/{id}` | GET | Obter posicao salva |
+| `/api/progress/{id}` | POST | Salvar posicao atual |
 
 
 ## Gostou do projeto? [Me pague um café](https://viniciusdev.site/coffee)

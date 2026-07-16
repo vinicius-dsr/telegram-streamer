@@ -113,6 +113,17 @@ class TelegramAPI {
         if (channel) url += `?channel=${encodeURIComponent(channel)}`;
         return this._request(url);
     }
+
+    getProgress(msgId) {
+        return this._json(`/api/progress/${msgId}`);
+    }
+
+    saveProgress(msgId, time) {
+        return this._json(`/api/progress/${msgId}`, {
+            method: 'POST',
+            body: JSON.stringify({ time }),
+        });
+    }
 }
 
 window.api = new TelegramAPI();

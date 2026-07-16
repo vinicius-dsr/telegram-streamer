@@ -16,10 +16,12 @@ import aiofiles
 from .config_manager import get_channel, get_channels, load_config, update_channel
 
 _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
+_PROGRESS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".playback_progress.json")
 _STREAM_CHUNK_SIZE = 1024 * 1024  # 1MB
 _PREFETCH_SIZE = 2 * 1024 * 1024  # 2MB
 _CACHE_MAX_BYTES = 1024 * 1024 * 1024  # 1GB total limit
 _CACHE_TTL = 86400  # 24 hours
+_PROGRESS_TTL = 2592000  # 30 days
 
 
 TAG_PATTERN = re.compile(r"#([A-Za-z0-9]+)")
@@ -337,6 +339,47 @@ class VideoService:
             self._video_cache.pop(channel_id, None)
         else:
             self._video_cache.clear()
+
+    @staticmethod
+    def _load_progress_data() -> Dict[str, Any]:
+        if not os.path.exists(_PROGRESS_FILE):
+            return {}
+        try:
+            with open(_PROGRESS_FILE, "r") as f:
+                import json
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    @staticmethod
+    def _save_progress_data(data: Dict[str, Any]):
+        os.makedirs(os.path.dirname(_PROGRESS_FILE) or ".", exist_ok=True)
+        import json
+        with open(_PROGRESS_FILE, "w") as f:
+            json.dump(data, f)
+
+    def save_progress(self, msg_id: int, current_time: float):
+        data = self._load_progress_data()
+        key = str(msg_id)
+        now = time.time()
+        data[key] = {"time": current_time, "updated": now}
+        stale = [k for k, v in data.items() if now - v.get("updated", 0) > _PROGRESS_TTL]
+        for k in stale:
+            del data[k]
+        self._save_progress_data(data)
+
+    def get_progress(self, msg_id: int) -> Optional[float]:
+        data = self._load_progress_data()
+        key = str(msg_id)
+        if key not in data:
+            return None
+        entry = data[key]
+        now = time.time()
+        if now - entry.get("updated", 0) > _PROGRESS_TTL:
+            del data[key]
+            self._save_progress_data(data)
+            return None
+        return entry.get("time")
 
     @staticmethod
     def _cache_path(msg_id: int) -> str:
