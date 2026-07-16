@@ -386,16 +386,7 @@ class App {
                 <div class="video-grid">${gVideos.map(v => this.renderCard(v)).join('')}</div>
             </details>`;
         }
-        if (ungrouped.length > 0) {
-            html += `<details class="group-dropdown">
-                <summary class="group-summary">
-                    <span class="group-chevron"></span>
-                    Outros
-                    <span class="group-count">(${ungrouped.length} videos)</span>
-                </summary>
-                <div class="video-grid">${ungrouped.map(v => this.renderCard(v)).join('')}</div>
-            </details>`;
-        }
+
         grid.innerHTML = html;
     }
 
