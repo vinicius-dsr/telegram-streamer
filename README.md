@@ -88,7 +88,6 @@ Assista a um exemplo de uso abaixo. O video foi gravado durante uma sessão real
 ![video](static/video/demo.mp4)
 
 
-
 ## Estrutura
 
 ```
