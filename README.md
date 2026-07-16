@@ -87,10 +87,7 @@ Assista a um exemplo de uso abaixo. O video foi gravado durante uma sessão real
 
 <video controls src="/static/video/demo.mp4" width="720" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);"></video>
 
-<p align="center">
-    <img src="static/img/canais.png" alt="Telegram Streamer Tela de Login">
-</p>
-</p>
+
 
 ## Estrutura
 
