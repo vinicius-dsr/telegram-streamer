@@ -78,7 +78,18 @@ Grupos permitem organizar videos por secao com titulo, exibidos como dropdowns n
 </p>
 
 <p align="center">
-   <img src="static/img/tela-de-streamer.png" alt="Telegram Streamer Tela de Login">
+    <img src="static/img/tela-de-streamer.png" alt="Telegram Streamer Tela de Login">
+</p>
+
+## Demonstração
+
+Assista a um exemplo de uso abaixo. O video foi gravado durante uma sessão real de streaming.
+
+<video controls src="/static/video/demo.mp4" width="720" style="border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);"></video>
+
+<p align="center">
+    <img src="static/img/canais.png" alt="Telegram Streamer Tela de Login">
+</p>
 </p>
 
 ## Estrutura
@@ -124,4 +135,3 @@ Telegram-Streamer/
 
 
 ## Gostou do projeto? [Me pague um café](https://viniciusdev.site/coffee)
-
