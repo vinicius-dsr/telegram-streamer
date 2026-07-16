@@ -405,7 +405,7 @@ class App {
             ? `<span class="tag-badge">#${video.tags[0]}</span>`
             : '';
         return `
-            <div class="video-card" onclick="app.playVideo(${video.msg_id})">
+            <div class="video-card" onmouseenter="app.prefetchVideo(${video.msg_id})" onclick="app.playVideo(${video.msg_id})">
                 <div class="thumb">
                     <img src="${thumbUrl}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                     <div class="thumb-placeholder" style="display:none">&#9654;</div>
@@ -427,6 +427,11 @@ class App {
                 </div>
             </div>
         `;
+    }
+
+    prefetchVideo(msgId) {
+        if (!this.currentChannel) return;
+        api.prefetch(msgId, this.currentChannel).catch(() => {});
     }
 
     async playVideo(msgId) {

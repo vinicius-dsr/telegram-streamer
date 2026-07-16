@@ -147,3 +147,18 @@ async def list_tags(
     if not channel:
         raise HTTPException(status_code=400, detail="No channel specified")
     return await service.list_tags(channel)
+
+
+@router.get("/prefetch/{msg_id}")
+async def prefetch_video(
+    msg_id: int,
+    request: Request,
+    channel: Optional[str] = None,
+):
+    service = _get_service(request)
+    if not channel:
+        cfg = load_config()
+        channel = cfg.get("default_channel")
+    if not channel:
+        raise HTTPException(status_code=400, detail="No channel specified")
+    return await service.prefetch_video(msg_id, channel)

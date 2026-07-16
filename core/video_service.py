@@ -1,16 +1,25 @@
 import asyncio
 import io
+import os
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename
 
+import aiofiles
+
 from .config_manager import get_channel, get_channels, load_config, update_channel
+
+_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache")
+_STREAM_CHUNK_SIZE = 1024 * 1024  # 1MB
+_PREFETCH_SIZE = 2 * 1024 * 1024  # 2MB
+_CACHE_MAX_BYTES = 1024 * 1024 * 1024  # 1GB total limit
+_CACHE_TTL = 86400  # 24 hours
 
 
 TAG_PATTERN = re.compile(r"#([A-Za-z0-9]+)")
@@ -140,7 +149,7 @@ class VideoService:
     _VIDEO_CACHE_TTL = 300   # 5 minutes
     _MSG_CACHE_TTL = 300     # 5 minutes
     _THUMB_CACHE_TTL = 1800  # 30 minutes
-    _MAX_CONCURRENT = 5
+    _MAX_CONCURRENT = 10
 
     def __init__(self, client: Optional[TelegramClient] = None):
         self.client = client
@@ -329,6 +338,58 @@ class VideoService:
         else:
             self._video_cache.clear()
 
+    @staticmethod
+    def _cache_path(msg_id: int) -> str:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        return os.path.join(_CACHE_DIR, f"{msg_id}.bin")
+
+    @staticmethod
+    def _get_from_cache(msg_id: int) -> Optional[str]:
+        path = VideoService._cache_path(msg_id)
+        if not os.path.exists(path):
+            return None
+        mtime = os.path.getmtime(path)
+        if time.time() - mtime > _CACHE_TTL:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            return None
+        return path
+
+    @staticmethod
+    def _save_chunk_to_cache(msg_id: int, data: bytes, append: bool = False):
+        path = VideoService._cache_path(msg_id)
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        mode = "ab" if append else "wb"
+        with open(path, mode) as f:
+            f.write(data)
+
+    @staticmethod
+    def _evict_cache_if_needed():
+        if not os.path.isdir(_CACHE_DIR):
+            return
+        total = 0
+        files = []
+        for fname in os.listdir(_CACHE_DIR):
+            fpath = os.path.join(_CACHE_DIR, fname)
+            if os.path.isfile(fpath):
+                size = os.path.getsize(fpath)
+                mtime = os.path.getmtime(fpath)
+                files.append((fpath, size, mtime))
+                total += size
+        if total <= _CACHE_MAX_BYTES:
+            return
+        files.sort(key=lambda x: x[2])
+        for fpath, size, _ in files:
+            if total <= _CACHE_MAX_BYTES:
+                break
+            try:
+                os.remove(fpath)
+                total -= size
+            except OSError:
+                pass
+
     async def stream_video(
         self,
         msg_id: int,
@@ -341,6 +402,59 @@ class VideoService:
             raise HTTPException(status_code=404, detail="No video media found")
         file_size = video_info["size"]
         mime_type = video_info["mime_type"]
+        cache_file = self._get_from_cache(msg_id)
+
+        if cache_file:
+            cache_size = os.path.getsize(cache_file)
+            if cache_size < file_size:
+                cache_file = None
+
+        if cache_file:
+            if range_header:
+                start, end = _parse_range_header(range_header, file_size)
+                content_length = end - start + 1
+
+                async def serve_cached_range():
+                    async with aiofiles.open(cache_file, "rb") as f:
+                        await f.seek(start)
+                        remaining = content_length
+                        while remaining > 0:
+                            chunk_size = min(_STREAM_CHUNK_SIZE, remaining)
+                            chunk = await f.read(chunk_size)
+                            if not chunk:
+                                break
+                            remaining -= len(chunk)
+                            yield chunk
+
+                return StreamingResponse(
+                    serve_cached_range(),
+                    status_code=206,
+                    headers={
+                        "Content-Range": f"bytes {start}-{end}/{file_size}",
+                        "Accept-Ranges": "bytes",
+                        "Content-Length": str(content_length),
+                        "Content-Type": mime_type,
+                    },
+                )
+
+            async def serve_cached_full():
+                async with aiofiles.open(cache_file, "rb") as f:
+                    while True:
+                        chunk = await f.read(_STREAM_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        yield chunk
+
+            return StreamingResponse(
+                serve_cached_full(),
+                status_code=200,
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(file_size),
+                    "Content-Type": mime_type,
+                },
+            )
+
         if range_header:
             start, end = _parse_range_header(range_header, file_size)
             content_length = end - start + 1
@@ -348,9 +462,15 @@ class VideoService:
             async def generate():
                 try:
                     async with self._sem:
+                        first_chunk = True
                         async for chunk in self.client.iter_download(
-                            msg.media, offset=start, request_size=content_length
+                            msg.media, offset=start, request_size=_STREAM_CHUNK_SIZE
                         ):
+                            if first_chunk and start == 0:
+                                self._save_chunk_to_cache(msg_id, chunk, append=False)
+                                first_chunk = False
+                            elif first_chunk:
+                                first_chunk = False
                             yield chunk
                 except FloodWaitError as e:
                     raise HTTPException(
@@ -373,7 +493,9 @@ class VideoService:
         async def generate():
             try:
                 async with self._sem:
-                    async for chunk in self.client.iter_download(msg.media):
+                    async for chunk in self.client.iter_download(
+                        msg.media, request_size=_STREAM_CHUNK_SIZE
+                    ):
                         yield chunk
             except FloodWaitError as e:
                 raise HTTPException(
@@ -391,6 +513,41 @@ class VideoService:
                 "Content-Type": mime_type,
             },
         )
+
+    async def prefetch_video(self, msg_id: int, channel_id: str) -> Response:
+        cache_file = self._get_from_cache(msg_id)
+        if cache_file:
+            return Response(status_code=200, headers={"X-Cache": "HIT"})
+
+        msg = await self._get_message(msg_id, channel_id)
+        video_info = _get_video_info(msg)
+        if not video_info:
+            raise HTTPException(status_code=404, detail="No video media found")
+
+        file_size = video_info["size"]
+        prefetch_end = min(_PREFETCH_SIZE, file_size) - 1
+
+        try:
+            async with self._sem:
+                first = True
+                downloaded = 0
+                async for chunk in self.client.iter_download(
+                    msg.media, offset=0, request_size=_STREAM_CHUNK_SIZE
+                ):
+                    self._save_chunk_to_cache(msg_id, chunk, append=not first)
+                    first = False
+                    downloaded += len(chunk)
+                    if downloaded >= _PREFETCH_SIZE:
+                        break
+        except FloodWaitError as e:
+            raise HTTPException(
+                status_code=429,
+                detail=f"FloodWait: aguarde {e.seconds} segundos",
+                headers={"Retry-After": str(e.seconds)},
+            )
+
+        self._evict_cache_if_needed()
+        return Response(status_code=200, headers={"X-Cache": "MISS"})
 
     async def get_thumbnail(self, msg_id: int, channel_id: str) -> bytes:
         now = time.time()

@@ -107,6 +107,12 @@ class TelegramAPI {
     reuseSession() {
         return this._json('/api/auth/reuse', { method: 'POST' });
     }
+
+    prefetch(msgId, channel) {
+        let url = `/api/prefetch/${msgId}`;
+        if (channel) url += `?channel=${encodeURIComponent(channel)}`;
+        return this._request(url);
+    }
 }
 
 window.api = new TelegramAPI();
