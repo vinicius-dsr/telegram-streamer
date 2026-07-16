@@ -85,9 +85,7 @@ Grupos permitem organizar videos por secao com titulo, exibidos como dropdowns n
 
 Assista a um exemplo de uso abaixo. O video foi gravado durante uma sessão real de streaming.
 
-<video width="640" height="360" controls>
-  <source src="static/video/demo.mp4" type="video/mp4">
-</video>
+![video](static/video/demo.mp4)
 
 
 
