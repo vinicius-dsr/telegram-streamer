@@ -300,7 +300,7 @@ class VideoService:
                     video_info = _get_video_info(msg)
                     if not video_info:
                         continue
-                    videos.append(self._build_metadata(msg, channel_id))
+                        videos.append(self._build_metadata(msg, channel_id))
         except FloodWaitError as e:
             raise HTTPException(
                 status_code=429,
@@ -308,6 +308,7 @@ class VideoService:
                 headers={"Retry-After": str(e.seconds)},
             )
 
+        videos.reverse()
         self._video_cache[cache_key] = (now, videos)
         return self._filter_videos(videos, tag, limit, offset)
 

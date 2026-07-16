@@ -541,7 +541,7 @@ class App {
             <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
             <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
         `;
-        builder.insertBefore(newRow, addRow);
+        addRow.after(newRow);
     }
 
     addEditGroupRow(btn) {
@@ -554,7 +554,7 @@ class App {
             <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
             <button class="btn-remove-group" onclick="this.parentElement.remove()" title="Remover grupo">&times;</button>
         `;
-        builder.insertBefore(newRow, addRow);
+        addRow.after(newRow);
     }
 
     async addChannel() {
