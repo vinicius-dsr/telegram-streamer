@@ -434,6 +434,11 @@ class App {
         const watchedClass = isWatched ? ' watched' : '';
         return `
             <div class="video-card${watchedClass}" onclick="app.playVideo(${video.msg_id})">
+                <div class="watch-badge" style="display:${isWatched ? '' : 'none'}" onclick="event.stopPropagation(); app.toggleWatched(${video.msg_id})">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                </div>
                 <div class="thumb">
                     <img src="${thumbUrl}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                     <div class="thumb-placeholder" style="display:none">&#9654;</div>
@@ -443,11 +448,6 @@ class App {
                                 <polygon points="5,3 19,12 5,21"/>
                             </svg>
                         </div>
-                    </div>
-                    <div class="watch-badge" style="display:${isWatched ? '' : 'none'}" onclick="event.stopPropagation(); app.toggleWatched(${video.msg_id})">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.5">
-                            <polyline points="20 6 9 17 4 12"/>
-                        </svg>
                     </div>
                 </div>
                 <span class="card-duration">${video.duration || ''}</span>

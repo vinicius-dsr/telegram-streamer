@@ -110,6 +110,12 @@
                         </svg>
                         Voltar
                     </button>
+                    <button id="player-watched-btn" class="btn-watched" onclick="player.toggleWatched()" style="display:none">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span id="player-watched-label">Marcar como assistido</span>
+                    </button>
                 </div>
                 <div class="player-wrapper">
                     <video id="video-player" controls autoplay preload="auto">

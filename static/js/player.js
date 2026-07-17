@@ -7,9 +7,12 @@ class VideoPlayer {
         this.sizeEl = document.getElementById('player-size');
         this.dateEl = document.getElementById('player-date');
         this.captionEl = document.getElementById('player-caption');
+        this.watchedBtn = document.getElementById('player-watched-btn');
+        this.watchedLabel = document.getElementById('player-watched-label');
         this.currentData = null;
         this._saveInterval = null;
         this._watchedMarked = false;
+        this._isWatched = false;
         this._RESUME_THRESHOLD = 0.9;
         this._WATCHED_THRESHOLD = 0.9;
 
@@ -25,8 +28,10 @@ class VideoPlayer {
             const duration = this.video.duration;
             if (duration > 0 && this.video.currentTime / duration >= this._WATCHED_THRESHOLD) {
                 this._watchedMarked = true;
+                this._isWatched = true;
                 api.toggleWatched(this.currentData.msg_id).then(() => {
                     app.markWatched(this.currentData.msg_id, true);
+                    this._updateWatchedBtn();
                 }).catch(() => {});
             }
         });
@@ -35,16 +40,38 @@ class VideoPlayer {
             if (!this.currentData) return;
             if (!this._watchedMarked) {
                 this._watchedMarked = true;
+                this._isWatched = true;
                 api.toggleWatched(this.currentData.msg_id).then(() => {
                     app.markWatched(this.currentData.msg_id, true);
+                    this._updateWatchedBtn();
                 }).catch(() => {});
             }
+        });
+    }
+
+    _updateWatchedBtn() {
+        if (!this.watchedBtn) return;
+        this.watchedBtn.style.display = '';
+        this.watchedBtn.classList.toggle('active', this._isWatched);
+        this.watchedLabel.textContent = this._isWatched ? 'Assistido' : 'Marcar como assistido';
+    }
+
+    toggleWatched() {
+        if (!this.currentData) return;
+        this._isWatched = !this._isWatched;
+        this._watchedMarked = this._isWatched;
+        api.toggleWatched(this.currentData.msg_id).then(() => {
+            app.markWatched(this.currentData.msg_id, this._isWatched);
+            this._updateWatchedBtn();
+        }).catch(() => {
+            this._isWatched = !this._isWatched;
         });
     }
 
     play(videoData, channel) {
         this.currentData = videoData;
         this._watchedMarked = false;
+        this._isWatched = app.watchedSet.has(videoData.msg_id);
         this._stopAutoSave();
 
         const url = api.streamUrl(videoData.msg_id, channel);
@@ -62,6 +89,8 @@ class VideoPlayer {
         this.sizeEl.textContent = videoData.size || '';
         this.dateEl.textContent = videoData.date ? new Date(videoData.date).toLocaleDateString('pt-BR') : '';
         this.captionEl.textContent = videoData.caption || '';
+
+        this._updateWatchedBtn();
 
         const onCanPlay = () => {
             this.video.removeEventListener('canplay', onCanPlay);
@@ -113,6 +142,7 @@ class VideoPlayer {
         this.video.removeAttribute('src');
         this.video.load();
         this.currentData = null;
+        if (this.watchedBtn) this.watchedBtn.style.display = 'none';
     }
 }
 
