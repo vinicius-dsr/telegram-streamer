@@ -8,6 +8,7 @@ class App {
         this.channels = [];
         this.currentPage = 'login';
         this.loginPhone = '';
+        this.watchedSet = new Set();
     }
 
     async init() {
@@ -167,11 +168,45 @@ class App {
         try {
             this.allVideos = await api.getVideos(this.currentChannel, '', 500, 0);
             this.filteredVideos = [...this.allVideos];
+            await this.loadWatched();
             this.applyFilters();
         } catch (e) {
             this.toast('Erro ao carregar videos: ' + e.message, 'error');
         } finally {
             this.showLoading(false);
+        }
+    }
+
+    async loadWatched() {
+        try {
+            const result = await api.getWatched();
+            this.watchedSet = new Set(result.watched || []);
+        } catch (e) {
+            this.watchedSet = new Set();
+        }
+    }
+
+    markWatched(msgId, watched) {
+        if (watched) {
+            this.watchedSet.add(msgId);
+        } else {
+            this.watchedSet.delete(msgId);
+        }
+        const card = document.querySelector(`.video-card[onclick*="playVideo(${msgId})"]`);
+        if (card) {
+            card.classList.toggle('watched', watched);
+            const badge = card.querySelector('.watch-badge');
+            if (badge) badge.style.display = watched ? '' : 'none';
+        }
+    }
+
+    async toggleWatched(msgId) {
+        try {
+            const result = await api.toggleWatched(msgId);
+            this.markWatched(msgId, result.watched);
+            this.toast(result.watched ? 'Marcado como assistido' : 'Marcado como nao assistido', 'info');
+        } catch (e) {
+            this.toast('Erro ao atualizar status', 'error');
         }
     }
 
@@ -395,8 +430,10 @@ class App {
         const tagHtml = video.tags && video.tags.length > 0
             ? `<span class="tag-badge">#${video.tags[0]}</span>`
             : '';
+        const isWatched = this.watchedSet.has(video.msg_id);
+        const watchedClass = isWatched ? ' watched' : '';
         return `
-            <div class="video-card" onmouseenter="app.prefetchVideo(${video.msg_id})" onclick="app.playVideo(${video.msg_id})">
+            <div class="video-card${watchedClass}" onclick="app.playVideo(${video.msg_id})">
                 <div class="thumb">
                     <img src="${thumbUrl}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                     <div class="thumb-placeholder" style="display:none">&#9654;</div>
@@ -406,6 +443,11 @@ class App {
                                 <polygon points="5,3 19,12 5,21"/>
                             </svg>
                         </div>
+                    </div>
+                    <div class="watch-badge" style="display:${isWatched ? '' : 'none'}" onclick="event.stopPropagation(); app.toggleWatched(${video.msg_id})">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" stroke-width="2.5">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
                     </div>
                 </div>
                 <span class="card-duration">${video.duration || ''}</span>

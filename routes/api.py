@@ -168,7 +168,8 @@ async def prefetch_video(
 async def get_progress(msg_id: int, request: Request):
     service = _get_service(request)
     progress = service.get_progress(msg_id)
-    return {"time": progress}
+    watched = service.get_watched_status(msg_id)
+    return {"time": progress, "watched": watched}
 
 
 @router.post("/progress/{msg_id}")
@@ -178,3 +179,17 @@ async def save_progress(msg_id: int, request: Request):
     current_time = data.get("time", 0)
     service.save_progress(msg_id, current_time)
     return {"ok": True}
+
+
+@router.get("/watched")
+async def get_all_watched(request: Request):
+    service = _get_service(request)
+    watched = service.get_all_watched()
+    return {"watched": watched}
+
+
+@router.post("/watched/{msg_id}")
+async def toggle_watched(msg_id: int, request: Request):
+    service = _get_service(request)
+    is_watched = service.toggle_watched(msg_id)
+    return {"watched": is_watched}

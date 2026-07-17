@@ -124,6 +124,16 @@ class TelegramAPI {
             body: JSON.stringify({ time }),
         });
     }
+
+    getWatched() {
+        return this._json('/api/watched');
+    }
+
+    toggleWatched(msgId) {
+        return this._json(`/api/watched/${msgId}`, {
+            method: 'POST',
+        });
+    }
 }
 
 window.api = new TelegramAPI();

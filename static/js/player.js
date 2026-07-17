@@ -9,7 +9,9 @@ class VideoPlayer {
         this.captionEl = document.getElementById('player-caption');
         this.currentData = null;
         this._saveInterval = null;
+        this._watchedMarked = false;
         this._RESUME_THRESHOLD = 0.9;
+        this._WATCHED_THRESHOLD = 0.9;
 
         this.video.addEventListener('error', () => {
             if (this.currentData) {
@@ -17,14 +19,38 @@ class VideoPlayer {
                 app.goBack();
             }
         });
+
+        this.video.addEventListener('timeupdate', () => {
+            if (!this.currentData || this._watchedMarked) return;
+            const duration = this.video.duration;
+            if (duration > 0 && this.video.currentTime / duration >= this._WATCHED_THRESHOLD) {
+                this._watchedMarked = true;
+                api.toggleWatched(this.currentData.msg_id).then(() => {
+                    app.markWatched(this.currentData.msg_id, true);
+                }).catch(() => {});
+            }
+        });
+
+        this.video.addEventListener('ended', () => {
+            if (!this.currentData) return;
+            if (!this._watchedMarked) {
+                this._watchedMarked = true;
+                api.toggleWatched(this.currentData.msg_id).then(() => {
+                    app.markWatched(this.currentData.msg_id, true);
+                }).catch(() => {});
+            }
+        });
     }
 
     play(videoData, channel) {
         this.currentData = videoData;
+        this._watchedMarked = false;
         this._stopAutoSave();
+
         const url = api.streamUrl(videoData.msg_id, channel);
         this.video.src = url;
         this.video.load();
+
         this.titleEl.textContent = videoData.title || 'Sem titulo';
         if (videoData.tags && videoData.tags.length > 0) {
             this.tagEl.textContent = '#' + videoData.tags[0];
@@ -37,23 +63,28 @@ class VideoPlayer {
         this.dateEl.textContent = videoData.date ? new Date(videoData.date).toLocaleDateString('pt-BR') : '';
         this.captionEl.textContent = videoData.caption || '';
 
+        const onCanPlay = () => {
+            this.video.removeEventListener('canplay', onCanPlay);
+            this._startAutoSave(videoData.msg_id);
+        };
+        this.video.addEventListener('canplay', onCanPlay);
+
         api.getProgress(videoData.msg_id).then(result => {
             const savedTime = result.time;
             if (savedTime && savedTime > 5) {
-                this.video.addEventListener('loadedmetadata', function onMeta() {
-                    this.removeEventListener('loadedmetadata', onMeta);
-                    const duration = this.duration;
+                const seek = () => {
+                    this.video.removeEventListener('canplay', seek);
+                    const duration = this.video.duration;
                     if (duration > 0 && savedTime / duration < this._RESUME_THRESHOLD) {
-                        this.currentTime = savedTime;
+                        this.video.currentTime = savedTime;
                         app.toast(`Retomando de ${formatTime(savedTime)}`, 'info');
                     }
-                }.bind(this.video));
+                };
+                this.video.addEventListener('canplay', seek);
             }
             this.video.play().catch(() => {});
-            this._startAutoSave(videoData.msg_id);
         }).catch(() => {
             this.video.play().catch(() => {});
-            this._startAutoSave(videoData.msg_id);
         });
     }
 

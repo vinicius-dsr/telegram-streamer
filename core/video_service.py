@@ -363,10 +363,10 @@ class VideoService:
         data = self._load_progress_data()
         key = str(msg_id)
         now = time.time()
-        data[key] = {"time": current_time, "updated": now}
-        stale = [k for k, v in data.items() if now - v.get("updated", 0) > _PROGRESS_TTL]
-        for k in stale:
-            del data[k]
+        entry = data.get(key, {})
+        entry["time"] = current_time
+        entry["updated"] = now
+        data[key] = entry
         self._save_progress_data(data)
 
     def get_progress(self, msg_id: int) -> Optional[float]:
@@ -374,13 +374,27 @@ class VideoService:
         key = str(msg_id)
         if key not in data:
             return None
-        entry = data[key]
-        now = time.time()
-        if now - entry.get("updated", 0) > _PROGRESS_TTL:
-            del data[key]
-            self._save_progress_data(data)
-            return None
-        return entry.get("time")
+        return data[key].get("time")
+
+    def get_watched_status(self, msg_id: int) -> bool:
+        data = self._load_progress_data()
+        key = str(msg_id)
+        return data.get(key, {}).get("watched", False)
+
+    def toggle_watched(self, msg_id: int) -> bool:
+        data = self._load_progress_data()
+        key = str(msg_id)
+        entry = data.get(key, {})
+        current = entry.get("watched", False)
+        entry["watched"] = not current
+        entry["updated"] = time.time()
+        data[key] = entry
+        self._save_progress_data(data)
+        return entry["watched"]
+
+    def get_all_watched(self) -> list:
+        data = self._load_progress_data()
+        return [int(k) for k, v in data.items() if v.get("watched")]
 
     @staticmethod
     def _cache_path(msg_id: int) -> str:
