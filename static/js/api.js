@@ -24,10 +24,9 @@ class TelegramAPI {
         return resp.json();
     }
 
-    getVideos(channel, tag = '', limit = 50, offset = 0) {
+    getVideos(channel, limit = 50, offset = 0) {
         let url = `/api/videos?limit=${limit}&offset=${offset}`;
         if (channel) url += `&channel=${encodeURIComponent(channel)}`;
-        if (tag) url += `&tag=${encodeURIComponent(tag)}`;
         return this._json(url);
     }
 
@@ -47,12 +46,6 @@ class TelegramAPI {
         let url = `/api/thumbnail/${msgId}`;
         if (channel) url += `?channel=${encodeURIComponent(channel)}`;
         return url;
-    }
-
-    getTags(channel) {
-        let url = '/api/tags';
-        if (channel) url += `?channel=${encodeURIComponent(channel)}`;
-        return this._json(url);
     }
 
     getChannels() {

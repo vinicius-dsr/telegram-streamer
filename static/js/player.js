@@ -2,7 +2,6 @@ class VideoPlayer {
     constructor() {
         this.video = document.getElementById('video-player');
         this.titleEl = document.getElementById('player-title');
-        this.tagEl = document.getElementById('player-tag');
         this.durationEl = document.getElementById('player-duration');
         this.sizeEl = document.getElementById('player-size');
         this.dateEl = document.getElementById('player-date');
@@ -79,12 +78,6 @@ class VideoPlayer {
         this.video.load();
 
         this.titleEl.textContent = videoData.title || 'Sem titulo';
-        if (videoData.tags && videoData.tags.length > 0) {
-            this.tagEl.textContent = '#' + videoData.tags[0];
-            this.tagEl.style.display = '';
-        } else {
-            this.tagEl.style.display = 'none';
-        }
         this.durationEl.textContent = videoData.duration || '';
         this.sizeEl.textContent = videoData.size || '';
         this.dateEl.textContent = videoData.date ? new Date(videoData.date).toLocaleDateString('pt-BR') : '';

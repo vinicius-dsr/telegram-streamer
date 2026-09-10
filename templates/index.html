@@ -87,7 +87,6 @@
 
         <!-- BROWSE PAGE -->
         <div id="browse-page" class="page active">
-            <div class="tags-bar" id="tags-bar"></div>
             <div class="content-container">
                 <div id="video-grid" class="video-grid">
                     <div class="empty-state" id="empty-state">
@@ -125,7 +124,6 @@
                 <div class="player-info">
                     <h2 id="player-title"></h2>
                     <div class="player-meta">
-                        <span id="player-tag" class="tag-badge"></span>
                         <span id="player-duration"></span>
                         <span id="player-size"></span>
                         <span id="player-date"></span>
@@ -164,25 +162,12 @@
                     <div class="add-channel-form" id="add-channel-form">
                         <input type="text" id="new-channel-id" placeholder="Link ou @usuario do canal">
                         <input type="text" id="new-channel-name" placeholder="Nome do canal">
-                        <div>
-                            <textarea id="new-channel-tags" placeholder="Tags: #F47 #F48 #F49 (espaco ou virgula)" rows="2"></textarea>
-                            <div class="form-hint">Separe por espaco ou virgula. O # e opcional.</div>
-                        </div>
                         <select id="new-channel-name-line">
                             <option value="ultima">Ultima linha = titulo</option>
                             <option value="primeira">Primeira linha = titulo</option>
                             <option value="segunda">Segunda linha = titulo</option>
                             <option value="terceira">Terceira linha = titulo</option>
                         </select>
-                        <div class="tag-groups-builder" id="add-groups-builder">
-                            <h4>Grupos de Tags (opcional)</h4>
-                            <div class="existing-groups-list" id="add-groups-list"></div>
-                            <div class="tag-group-row">
-                                <input type="text" class="group-name-input" placeholder="Nome do grupo">
-                                <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
-                                <button class="btn-remove-group" onclick="app.addGroupRow(this)" title="Adicionar grupo">+</button>
-                            </div>
-                        </div>
                         <button class="btn btn-primary" onclick="app.addChannel()">Adicionar canal</button>
                     </div>
                 </div>
@@ -200,11 +185,6 @@
                 <input type="text" id="edit-channel-name">
             </div>
             <div class="form-group">
-                <label>Tags</label>
-                <textarea id="edit-channel-tags" rows="2"></textarea>
-                <div class="form-hint">Separe por espaco ou virgula. O # e opcional.</div>
-            </div>
-            <div class="form-group">
                 <label>Linha do titulo</label>
                 <select id="edit-channel-name-line">
                     <option value="ultima">Ultima linha = titulo</option>
@@ -212,15 +192,6 @@
                     <option value="segunda">Segunda linha = titulo</option>
                     <option value="terceira">Terceira linha = titulo</option>
                 </select>
-            </div>
-            <div class="tag-groups-builder">
-                <h4>Grupos de Tags</h4>
-                <div class="existing-groups-list" id="edit-groups-list"></div>
-                <div class="tag-group-row">
-                    <input type="text" class="group-name-input" placeholder="Nome do grupo">
-                    <input type="text" class="group-tags-input" placeholder="Tags: #F47 #F48">
-                    <button class="btn-remove-group" onclick="app.addEditGroupRow(this)" title="Adicionar grupo">+</button>
-                </div>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="app.closeEditModal()">Cancelar</button>
