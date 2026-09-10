@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse, Response
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
-from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename, InputMessagesFilterVideo
+from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename, InputMessagesFilterVideo, InputMessagesFilterPinned
 
 import aiofiles
 
@@ -20,9 +20,14 @@ _PROGRESS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__
 _STREAM_CHUNK_SIZE = 1024 * 1024  # 1MB
 _PREFETCH_SIZE = 2 * 1024 * 1024  # 2MB
 _SCAN_LIMIT = 1000  # max videos scanned per channel listing
+_SUMMARY_CACHE_TTL = 300  # 5 minutes
+_SUMMARY_FALLBACK_SCAN = 500  # recent messages scanned when no pinned summary
 _CACHE_MAX_BYTES = 1024 * 1024 * 1024  # 1GB total limit
 _CACHE_TTL = 86400  # 24 hours
 _PROGRESS_TTL = 2592000  # 30 days
+
+
+TAG_PATTERN = re.compile(r"#([A-Za-z0-9_]+)")
 
 
 def _entity_to_channel_id(entity) -> Optional[str]:
@@ -59,6 +64,55 @@ def extract_title(text: str, name_line: str = "ultima") -> str:
     }
     idx = mapping.get(name_line, -1)
     return lines[idx] if abs(idx) <= len(lines) else lines[-1]
+
+
+def extract_tags(text: str) -> List[str]:
+    if not text:
+        return []
+    seen = set()
+    result = []
+    for t in TAG_PATTERN.findall(text):
+        t = t.upper()
+        if t not in seen:
+            seen.add(t)
+            result.append(t)
+    return result
+
+
+def parse_summary(text: str) -> List[Dict[str, Any]]:
+    """Parse the channel summary ('= Módulo', '== Subtópico', '#F01 #F02 ...')
+    into a hierarchical structure of modules with subtopics and their tags."""
+    if not text:
+        return []
+    modules: List[Dict[str, Any]] = []
+    current_module: Optional[Dict[str, Any]] = None
+    current_subtopic: Optional[Dict[str, Any]] = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("=="):
+            current_subtopic = {"name": line.lstrip("=").strip(), "tags": []}
+            if current_module is not None:
+                current_module["subtopics"].append(current_subtopic)
+        elif line.startswith("="):
+            current_module = {"name": line.lstrip("=").strip(), "subtopics": []}
+            modules.append(current_module)
+            current_subtopic = None
+        elif line.startswith("#"):
+            if current_subtopic is None or current_module is None:
+                continue
+            for t in TAG_PATTERN.findall(line):
+                tag = t.upper()
+                if tag not in current_subtopic["tags"]:
+                    current_subtopic["tags"].append(tag)
+        # '-' and free text are ignored
+    result = []
+    for module in modules:
+        module["subtopics"] = [s for s in module["subtopics"] if s["tags"]]
+        if module["subtopics"]:
+            result.append(module)
+    return result
 
 
 def _get_video_info(msg: Any) -> Optional[Dict[str, Any]]:
@@ -151,6 +205,7 @@ class VideoService:
         self._video_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
         self._msg_cache: Dict[int, Tuple[float, Any]] = {}
         self._thumb_cache: Dict[int, Tuple[float, bytes]] = {}
+        self._summary_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
         self._sem = asyncio.Semaphore(self._MAX_CONCURRENT)
 
     def set_client(self, client: TelegramClient):
@@ -256,6 +311,7 @@ class VideoService:
         return {
             "msg_id": msg.id,
             "title": title,
+            "tags": extract_tags(text),
             "caption": text,
             "date": msg.date.isoformat() if msg.date else None,
             "channel": channel_id,
@@ -282,18 +338,100 @@ class VideoService:
                 return self._filter_videos(cached_videos, limit, offset)
 
         entity = await self._resolve_entity(channel_id)
-        videos = await self._scan_videos(entity, channel_id)
+        summary = await self._resolve_summary(entity, channel_id)
+        videos = await self._scan_videos(entity, channel_id, summary)
 
         videos.reverse()
         self._video_cache[cache_key] = (now, videos)
         return self._filter_videos(videos, limit, offset)
 
-    async def _scan_videos(self, entity, channel_id: str) -> List[Dict[str, Any]]:
+    async def get_summary(self, channel_id: str) -> Dict[str, Any]:
+        entity = await self._resolve_entity(channel_id)
+        modules = await self._resolve_summary(entity, channel_id)
+        return {
+            "channel": channel_id,
+            "has_summary": bool(modules),
+            "modules": modules,
+        }
+
+    async def _resolve_summary(self, entity, channel_id: str) -> List[Dict[str, Any]]:
+        """Find and parse the channel summary. Prefers a pinned message; falls
+        back to scanning recent messages for the summary pattern."""
+        now = time.time()
+        cached = self._summary_cache.get(channel_id)
+        if cached and now - cached[0] < _SUMMARY_CACHE_TTL:
+            return cached[1]
+        summary: List[Dict[str, Any]] = []
+        if self.client:
+            try:
+                async with self._sem:
+                    async for msg in self.client.iter_messages(
+                        entity,
+                        filter=InputMessagesFilterPinned,
+                        limit=20,
+                    ):
+                        parsed = parse_summary(msg.message or "")
+                        if parsed:
+                            summary = parsed
+                            break
+            except FloodWaitError as e:
+                if e.seconds > 60:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                        headers={"Retry-After": str(e.seconds)},
+                    )
+                await asyncio.sleep(e.seconds + 1)
+            except Exception:
+                pass
+            if not summary:
+                summary = await self._scan_summary_fallback(entity)
+        self._summary_cache[channel_id] = (now, summary)
+        return summary
+
+    async def _scan_summary_fallback(self, entity) -> List[Dict[str, Any]]:
+        if not self.client:
+            return []
+        try:
+            async with self._sem:
+                async for msg in self.client.iter_messages(
+                    entity,
+                    limit=_SUMMARY_FALLBACK_SCAN,
+                ):
+                    text = msg.message or ""
+                    if not text:
+                        continue
+                    if "sumário" in text.lower() or "sumario" in text.lower():
+                        parsed = parse_summary(text)
+                        if parsed:
+                            return parsed
+                    elif text.lstrip().startswith("=") and "#" in text:
+                        parsed = parse_summary(text)
+                        if parsed:
+                            return parsed
+        except FloodWaitError as e:
+            if e.seconds > 60:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                    headers={"Retry-After": str(e.seconds)},
+                )
+            await asyncio.sleep(e.seconds + 1)
+        except Exception:
+            pass
+        return []
+
+    async def _scan_videos(self, entity, channel_id: str, summary: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Enumerate all videos in the channel using the server-side video filter,
         without depending on tags or captions. Retries on FloodWait, resuming from
         the oldest message already collected."""
         if not self.client:
             raise HTTPException(status_code=503, detail="Not connected to Telegram")
+        tag_map = {}
+        for mi, module in enumerate(summary or []):
+            for si, subtopic in enumerate(module["subtopics"]):
+                for tag in subtopic["tags"]:
+                    tag_map.setdefault(tag, (mi, module["name"], si, subtopic["name"]))
         videos = []
         seen = set()
         pending = _SCAN_LIMIT
@@ -315,7 +453,9 @@ class VideoService:
                         if msg.id in seen:
                             continue
                         seen.add(msg.id)
-                        videos.append(self._build_metadata(msg, channel_id))
+                        meta = self._build_metadata(msg, channel_id)
+                        self._annotate_section(meta, tag_map)
+                        videos.append(meta)
                         pending -= 1
                         min_id = msg.id
                         added_this_pass += 1
@@ -332,6 +472,28 @@ class VideoService:
                 break
         return videos
 
+    @staticmethod
+    def _annotate_section(
+        meta: Dict[str, Any],
+        tag_map: Dict[str, Tuple[int, str, int, str]],
+    ) -> None:
+        section = None
+        for tag in meta.get("tags") or []:
+            section = tag_map.get(tag)
+            if section:
+                break
+        if section:
+            midx, mname, sidx, sname = section
+            meta["module"] = mname
+            meta["module_idx"] = midx
+            meta["subtopic"] = sname
+            meta["subtopic_idx"] = sidx
+        else:
+            meta["module"] = None
+            meta["module_idx"] = -1
+            meta["subtopic"] = None
+            meta["subtopic_idx"] = -1
+
     def _filter_videos(self, videos: List[Dict], limit: int, offset: int) -> List[Dict]:
         result = videos
         if offset > 0:
@@ -345,8 +507,10 @@ class VideoService:
     def invalidate_cache(self, channel_id: Optional[str] = None):
         if channel_id:
             self._video_cache.pop(channel_id, None)
+            self._summary_cache.pop(channel_id, None)
         else:
             self._video_cache.clear()
+            self._summary_cache.clear()
 
     @staticmethod
     def _load_progress_data() -> Dict[str, Any]:
