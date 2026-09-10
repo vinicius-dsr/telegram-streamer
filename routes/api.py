@@ -11,7 +11,6 @@ from core.config_manager import (
     update_channel,
     get_channel,
     load_config,
-    parse_tags_input,
 )
 
 router = APIRouter(prefix="/api")
@@ -42,10 +41,8 @@ async def create_channel(request: Request):
     if not channel_id.startswith("@") and not channel_id.startswith("https"):
         channel_id = f"@{channel_id}"
     name = data.get("name", channel_id)
-    tags = parse_tags_input(data.get("tags_raw", "")) or data.get("tags", [])
     name_line = data.get("name_line", "ultima")
-    tag_groups = data.get("tag_groups", [])
-    ch = add_channel(channel_id, name, tags, name_line, tag_groups)
+    ch = add_channel(channel_id, name, name_line)
     _get_service(request).invalidate_cache()
     return ch
 
@@ -53,8 +50,6 @@ async def create_channel(request: Request):
 @router.put("/channel/{channel_id:path}")
 async def edit_channel(channel_id: str, request: Request):
     data = await request.json()
-    if "tags_raw" in data:
-        data["tags"] = parse_tags_input(data.pop("tags_raw"))
     updated = update_channel(channel_id, **data)
     if not updated:
         raise HTTPException(status_code=404, detail="Channel not found")
@@ -74,7 +69,6 @@ async def delete_channel(channel_id: str, request: Request):
 async def list_videos(
     request: Request,
     channel: Optional[str] = None,
-    tag: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ):
@@ -84,7 +78,7 @@ async def list_videos(
         channel = cfg.get("default_channel")
     if not channel:
         raise HTTPException(status_code=400, detail="No channel specified")
-    return await service.list_videos(channel, tag=tag, limit=limit, offset=offset)
+    return await service.list_videos(channel, limit=limit, offset=offset)
 
 
 @router.get("/video/{msg_id}")
@@ -133,20 +127,6 @@ async def get_thumbnail(
     data = await service.get_thumbnail(msg_id, channel)
     from fastapi.responses import Response
     return Response(content=data, media_type="image/jpeg")
-
-
-@router.get("/tags")
-async def list_tags(
-    request: Request,
-    channel: Optional[str] = None,
-):
-    service = _get_service(request)
-    if not channel:
-        cfg = load_config()
-        channel = cfg.get("default_channel")
-    if not channel:
-        raise HTTPException(status_code=400, detail="No channel specified")
-    return await service.list_tags(channel)
 
 
 @router.get("/prefetch/{msg_id}")
