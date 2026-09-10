@@ -7,6 +7,7 @@ class App {
         this.currentPage = 'login';
         this.loginPhone = '';
         this.watchedSet = new Set();
+        this.summary = null;
     }
 
     async init() {
@@ -161,7 +162,12 @@ class App {
         if (!this.currentChannel) return;
         this.showLoading(true);
         try {
-            this.allVideos = await api.getVideos(this.currentChannel, 1000, 0);
+            const [videos, summary] = await Promise.all([
+                api.getVideos(this.currentChannel, 1000, 0),
+                api.getSummary(this.currentChannel).catch(() => ({ has_summary: false, modules: [] })),
+            ]);
+            this.allVideos = videos;
+            this.summary = summary;
             this.filteredVideos = [...this.allVideos];
             await this.loadWatched();
             this.applyFilters();
@@ -225,14 +231,91 @@ class App {
     }
 
     renderGrid(videos) {
-        const grid = document.getElementById('video-grid');
+        const container = document.getElementById('video-grid');
 
         if (!videos || videos.length === 0) {
-            grid.innerHTML = '<div class="empty-state"><p>Nenhum video encontrado</p></div>';
+            container.innerHTML = '<div class="empty-state"><p>Nenhum video encontrado</p></div>';
             return;
         }
 
-        grid.innerHTML = '<div class="video-grid">' + videos.map(v => this.renderCard(v)).join('') + '</div>';
+        const hasSummary = this.summary &&
+            this.summary.has_summary &&
+            Array.isArray(this.summary.modules) &&
+            this.summary.modules.length > 0;
+
+        if (!hasSummary) {
+            container.innerHTML = '<div class="video-grid">' + videos.map(v => this.renderCard(v)).join('') + '</div>';
+            return;
+        }
+
+        const byKey = new Map();
+        const others = [];
+        for (const v of videos) {
+            if (typeof v.module_idx === 'number' && v.module_idx >= 0 &&
+                typeof v.subtopic_idx === 'number' && v.subtopic_idx >= 0) {
+                const key = v.module_idx + ':' + v.subtopic_idx;
+                if (!byKey.has(key)) byKey.set(key, []);
+                byKey.get(key).push(v);
+            } else {
+                others.push(v);
+            }
+        }
+
+        let html = '';
+        this.summary.modules.forEach((mod, mi) => {
+            const sections = [];
+            mod.subtopics.forEach((sub, si) => {
+                const subVideos = byKey.get(mi + ':' + si);
+                if (subVideos && subVideos.length > 0) {
+                    sections.push({ sub, videos: subVideos });
+                }
+            });
+            if (sections.length === 0) return;
+            const modCount = sections.reduce((acc, s) => acc + s.videos.length, 0);
+            html += `<details class="group-dropdown">
+                <summary class="group-summary">
+                    <span class="group-chevron"></span>
+                    <span>${this.esc(mod.name)}</span>
+                    <span class="group-count">${modCount}</span>
+                </summary>
+                <div class="group-content">`;
+            sections.forEach(({ sub, videos: subVideos }) => {
+                html += `<details class="group-dropdown subtopic-block">
+                    <summary class="group-summary">
+                        <span class="group-chevron"></span>
+                        <span>${this.esc(sub.name)}</span>
+                        <span class="group-count">${subVideos.length}</span>
+                    </summary>
+                    <div class="group-content">
+                        <div class="video-grid">${subVideos.map(v => this.renderCard(v)).join('')}</div>
+                    </div>
+                </details>`;
+            });
+            html += `</div></details>`;
+        });
+
+        if (others.length > 0) {
+            html += `<details class="group-dropdown">
+                <summary class="group-summary">
+                    <span class="group-chevron"></span>
+                    <span>Outros</span>
+                    <span class="group-count">${others.length}</span>
+                </summary>
+                <div class="group-content">
+                    <div class="video-grid">${others.map(v => this.renderCard(v)).join('')}</div>
+                </div>
+            </details>`;
+        }
+
+        container.innerHTML = html || '<div class="empty-state"><p>Nenhum video encontrado</p></div>';
+    }
+
+    esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     renderCard(video) {

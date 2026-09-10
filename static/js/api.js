@@ -30,6 +30,10 @@ class TelegramAPI {
         return this._json(url);
     }
 
+    getSummary(channel) {
+        return this._json(`/api/summary?channel=${encodeURIComponent(channel)}`);
+    }
+
     getVideo(msgId, channel) {
         let url = `/api/video/${msgId}`;
         if (channel) url += `?channel=${encodeURIComponent(channel)}`;

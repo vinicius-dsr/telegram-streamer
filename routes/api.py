@@ -81,6 +81,15 @@ async def list_videos(
     return await service.list_videos(channel, limit=limit, offset=offset)
 
 
+@router.get("/summary")
+async def get_summary(channel: str, request: Request):
+    """Return the channel summary (modules/subtopics) used to organize videos."""
+    if not channel:
+        raise HTTPException(status_code=400, detail="channel is required")
+    service = _get_service(request)
+    return await service.get_summary(channel)
+
+
 @router.get("/video/{msg_id}")
 async def get_video(
     msg_id: int,
