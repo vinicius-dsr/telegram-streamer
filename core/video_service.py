@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.responses import StreamingResponse, Response
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
-from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename
+from telethon.tl.types import DocumentAttributeVideo, DocumentAttributeFilename, InputMessagesFilterVideo
 
 import aiofiles
 
@@ -19,12 +19,10 @@ _CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 _PROGRESS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".playback_progress.json")
 _STREAM_CHUNK_SIZE = 1024 * 1024  # 1MB
 _PREFETCH_SIZE = 2 * 1024 * 1024  # 2MB
+_SCAN_LIMIT = 1000  # max videos scanned per channel listing
 _CACHE_MAX_BYTES = 1024 * 1024 * 1024  # 1GB total limit
 _CACHE_TTL = 86400  # 24 hours
 _PROGRESS_TTL = 2592000  # 30 days
-
-
-TAG_PATTERN = re.compile(r"#([A-Za-z0-9]+)")
 
 
 def _entity_to_channel_id(entity) -> Optional[str]:
@@ -39,12 +37,6 @@ def _entity_to_channel_id(entity) -> Optional[str]:
     if peer is not None:
         return str(peer)
     return None
-
-
-def extract_tags(text: str) -> List[str]:
-    if not text:
-        return []
-    return TAG_PATTERN.findall(text)
 
 
 def extract_title(text: str, name_line: str = "ultima") -> str:
@@ -257,13 +249,13 @@ class VideoService:
         text = msg.message or ""
         channel_cfg = get_channel(channel_id)
         name_line = channel_cfg["name_line"] if channel_cfg else "ultima"
-        tags = extract_tags(text)
         title = extract_title(text, name_line)
+        if not text or not title or title == "Sem titulo":
+            title = f"Video {msg.id}"
         video_info = _get_video_info(msg)
         return {
             "msg_id": msg.id,
             "title": title,
-            "tags": tags,
             "caption": text,
             "date": msg.date.isoformat() if msg.date else None,
             "channel": channel_id,
@@ -279,7 +271,6 @@ class VideoService:
     async def list_videos(
         self,
         channel_id: str,
-        tag: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
@@ -288,34 +279,61 @@ class VideoService:
         if cache_key in self._video_cache:
             cached_at, cached_videos = self._video_cache[cache_key]
             if now - cached_at < self._VIDEO_CACHE_TTL:
-                return self._filter_videos(cached_videos, tag, limit, offset)
+                return self._filter_videos(cached_videos, limit, offset)
 
         entity = await self._resolve_entity(channel_id)
-        videos = []
-        try:
-            async with self._sem:
-                async for msg in self.client.iter_messages(entity, limit=200):
-                    if not msg.message or not msg.media:
-                        continue
-                    video_info = _get_video_info(msg)
-                    if not video_info:
-                        continue
-                    videos.append(self._build_metadata(msg, channel_id))
-        except FloodWaitError as e:
-            raise HTTPException(
-                status_code=429,
-                detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
-                headers={"Retry-After": str(e.seconds)},
-            )
+        videos = await self._scan_videos(entity, channel_id)
 
         videos.reverse()
         self._video_cache[cache_key] = (now, videos)
-        return self._filter_videos(videos, tag, limit, offset)
+        return self._filter_videos(videos, limit, offset)
 
-    def _filter_videos(self, videos: List[Dict], tag: Optional[str], limit: int, offset: int) -> List[Dict]:
+    async def _scan_videos(self, entity, channel_id: str) -> List[Dict[str, Any]]:
+        """Enumerate all videos in the channel using the server-side video filter,
+        without depending on tags or captions. Retries on FloodWait, resuming from
+        the oldest message already collected."""
+        if not self.client:
+            raise HTTPException(status_code=503, detail="Not connected to Telegram")
+        videos = []
+        seen = set()
+        pending = _SCAN_LIMIT
+        min_id = 0
+        while pending > 0:
+            added_this_pass = 0
+            try:
+                async with self._sem:
+                    async for msg in self.client.iter_messages(
+                        entity,
+                        limit=pending,
+                        filter=InputMessagesFilterVideo,
+                        min_id=min_id,
+                    ):
+                        if not getattr(msg, "media", None):
+                            continue
+                        if _get_video_info(msg) is None:
+                            continue
+                        if msg.id in seen:
+                            continue
+                        seen.add(msg.id)
+                        videos.append(self._build_metadata(msg, channel_id))
+                        pending -= 1
+                        min_id = msg.id
+                        added_this_pass += 1
+            except FloodWaitError as e:
+                if e.seconds > 60:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                        headers={"Retry-After": str(e.seconds)},
+                    )
+                await asyncio.sleep(e.seconds + 1)
+                continue
+            if added_this_pass == 0:
+                break
+        return videos
+
+    def _filter_videos(self, videos: List[Dict], limit: int, offset: int) -> List[Dict]:
         result = videos
-        if tag:
-            result = [v for v in result if v.get("tags") and tag in v["tags"]]
         if offset > 0:
             result = result[offset:]
         return result[:limit]
@@ -323,17 +341,6 @@ class VideoService:
     async def get_video_metadata(self, msg_id: int, channel_id: str) -> Dict[str, Any]:
         msg = await self._get_message(msg_id, channel_id)
         return self._build_metadata(msg, channel_id)
-
-    async def list_tags(self, channel_id: str) -> List[Dict[str, Any]]:
-        videos = await self.list_videos(channel_id, limit=9999)
-        tag_counts: Dict[str, int] = {}
-        for v in videos:
-            for tag in v.get("tags", []):
-                tag_counts[tag] = tag_counts.get(tag, 0) + 1
-        return [
-            {"tag": tag, "count": count}
-            for tag, count in sorted(tag_counts.items(), key=lambda x: -x[1])
-        ]
 
     def invalidate_cache(self, channel_id: Optional[str] = None):
         if channel_id:
