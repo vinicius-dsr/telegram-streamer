@@ -380,7 +380,7 @@ html, body {
 .content-container {
     max-width: var(--content-max);
     margin: 0 auto;
-    padding: 0 24px;
+    padding: var(--header-height) 24px 0;
 }
 
 #video-grid {
@@ -1030,7 +1030,7 @@ html, body {
     }
 
     .content-container {
-        padding: 0 12px;
+        padding: var(--header-height) 12px 0;
     }
 
     .video-grid {
