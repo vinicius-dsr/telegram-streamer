@@ -7,13 +7,11 @@
 ## Funcionalidades
 
 - **Streaming direto** — videos sao reproduzidos do Telegram sem download, com suporte a Range requests (seek/progressivo)
-- **Pre-carregamento** — primeiros 2MB sao baixados ao passar o mouse, acelerando o playback
 - **Thumbnails** — miniaturas geradas automaticamente dos videos
 - **Canais** — suporta multiplos canais, incluindo links de convite (`t.me/+hash`)
-- **Tag groups** — organize videos em grupos com nome (ex: "Iniciando com Next.js", "App Router")
 - **Segregacao por sumario** — detecta a mensagem de sumario do canal (`= modulo`, `== subtopico`, `#tags`) e agrupa os videos automaticamente em accordions de modulos/subtopicos
 - **Sumarios multiplos** — mescla varias mensagens guia (fixada + continuacoes) em um unico indice, mesmo quando as tags de um modulo ficam na mensagem seguinte
-- **Filtros** — filtre por grupo, por tag individual, ou busque por titulo
+- **Busca** — filtre videos por titulo ou caption
 - **Sessao compartilhada** — reutiliza a sessao do Telegram-Downloader-Tools
 - **2FA** — suporte completo a autenticacao em duas etapas
 - **Cache** — videos sao cacheados por 5 minutos, eliminando escaneamentos repetidos
@@ -67,15 +65,6 @@ Adicione canais pela tela de Configuracoes:
 - **Link direto:** `https://t.me/nome_do_canal`
 - **Link de convite:** `https://t.me/+hash_do_convite`
 - **Username:** `@nome_do_canal`
-
-### Tags e Grupos
-
-Formato de entrada (aceita espacos ou virgulas):
-```
-#F01 #F02 #F03 #F04
-```
-
-Grupos permitem organizar videos por secao com titulo, exibidos como dropdowns na tela principal.
 
 ### Sumario do canal (segregacao automatica)
 
@@ -158,11 +147,12 @@ Telegram-Streamer/
 | `/api/video/{id}` | GET | Metadata de um video |
 | `/api/stream/{id}` | GET | Streaming do video |
 | `/api/thumbnail/{id}` | GET | Thumbnail do video |
-| `/api/tags` | GET | Listar tags |
 | `/api/summary` | GET | Sumario do canal (modulos/subtopicos/tags) |
 | `/api/prefetch/{id}` | GET | Pre-baixar inicio do video |
 | `/api/progress/{id}` | GET | Obter posicao salva |
 | `/api/progress/{id}` | POST | Salvar posicao atual |
+| `/api/watched` | GET | Listar videos assistidos |
+| `/api/watched/{id}` | POST | Alternar status de assistido |
 
 
 ## Gostou do projeto? [Me pague um café](https://viniciusdev.site/coffee)
