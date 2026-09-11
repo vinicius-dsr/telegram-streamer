@@ -81,7 +81,9 @@ def extract_tags(text: str) -> List[str]:
 
 def parse_summary(text: str) -> List[Dict[str, Any]]:
     """Parse the channel summary ('= Módulo', '== Subtópico', '#F01 #F02 ...')
-    into a hierarchical structure of modules with subtopics and their tags."""
+    into a hierarchical structure of modules with subtopics and their tags.
+    Tags placed directly under a module (without a '==' subtopic) become a flat
+    subtopic named after the module."""
     if not text:
         return []
     modules: List[Dict[str, Any]] = []
@@ -96,21 +98,34 @@ def parse_summary(text: str) -> List[Dict[str, Any]]:
             if current_module is not None:
                 current_module["subtopics"].append(current_subtopic)
         elif line.startswith("="):
-            current_module = {"name": line.lstrip("=").strip(), "subtopics": []}
+            current_module = {"name": line.lstrip("=").strip(), "subtopics": [], "_flat_tags": []}
             modules.append(current_module)
             current_subtopic = None
         elif line.startswith("#"):
-            if current_subtopic is None or current_module is None:
+            if current_module is None:
                 continue
-            for t in TAG_PATTERN.findall(line):
-                tag = t.upper()
-                if tag not in current_subtopic["tags"]:
-                    current_subtopic["tags"].append(tag)
+            tags = [t.upper() for t in TAG_PATTERN.findall(line)]
+            if current_subtopic is not None:
+                for tag in tags:
+                    if tag not in current_subtopic["tags"]:
+                        current_subtopic["tags"].append(tag)
+            else:
+                for tag in tags:
+                    if tag not in current_module["_flat_tags"]:
+                        current_module["_flat_tags"].append(tag)
         # '-' and free text are ignored
     result = []
     for module in modules:
-        module["subtopics"] = [s for s in module["subtopics"] if s["tags"]]
-        if module["subtopics"]:
+        subtopics = [s for s in module["subtopics"] if s["tags"]]
+        flat_tags = module.pop("_flat_tags", [])
+        if flat_tags:
+            flat = {"name": module["name"], "tags": flat_tags, "flat": True}
+            if subtopics:
+                subtopics.append(flat)
+            else:
+                subtopics = [flat]
+        module["subtopics"] = subtopics
+        if subtopics:
             result.append(module)
     return result
 
@@ -401,13 +416,13 @@ class VideoService:
                     text = msg.message or ""
                     if not text:
                         continue
-                    if "sumário" in text.lower() or "sumario" in text.lower():
+                    if "sumário" in text.lower() or "sumario" in text.lower() or ("#" in text and "=" in text):
                         parsed = parse_summary(text)
-                        if parsed:
-                            return parsed
-                    elif text.lstrip().startswith("=") and "#" in text:
-                        parsed = parse_summary(text)
-                        if parsed:
+                        if not parsed:
+                            continue
+                        headings = sum(1 for m in parsed for _ in m["subtopics"]) + len(parsed)
+                        tags = sum(len(s["tags"]) for m in parsed for s in m["subtopics"])
+                        if headings >= 2 or tags >= 3:
                             return parsed
         except FloodWaitError as e:
             if e.seconds > 60:

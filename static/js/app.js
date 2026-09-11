@@ -280,16 +280,20 @@ class App {
                 </summary>
                 <div class="group-content">`;
             sections.forEach(({ sub, videos: subVideos }) => {
-                html += `<details class="group-dropdown subtopic-block">
-                    <summary class="group-summary">
-                        <span class="group-chevron"></span>
-                        <span>${this.esc(sub.name)}</span>
-                        <span class="group-count">${subVideos.length}</span>
-                    </summary>
-                    <div class="group-content">
-                        <div class="video-grid">${subVideos.map(v => this.renderCard(v)).join('')}</div>
-                    </div>
-                </details>`;
+                if (sub.flat) {
+                    html += `<div class="video-grid">${subVideos.map(v => this.renderCard(v)).join('')}</div>`;
+                } else {
+                    html += `<details class="group-dropdown subtopic-block">
+                        <summary class="group-summary">
+                            <span class="group-chevron"></span>
+                            <span>${this.esc(sub.name)}</span>
+                            <span class="group-count">${subVideos.length}</span>
+                        </summary>
+                        <div class="group-content">
+                            <div class="video-grid">${subVideos.map(v => this.renderCard(v)).join('')}</div>
+                        </div>
+                    </details>`;
+                }
             });
             html += `</div></details>`;
         });
