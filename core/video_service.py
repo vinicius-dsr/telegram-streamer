@@ -21,7 +21,8 @@ _STREAM_CHUNK_SIZE = 1024 * 1024  # 1MB
 _PREFETCH_SIZE = 2 * 1024 * 1024  # 2MB
 _SCAN_LIMIT = 1000  # max videos scanned per channel listing
 _SUMMARY_CACHE_TTL = 300  # 5 minutes
-_SUMMARY_FALLBACK_SCAN = 500  # recent messages scanned when no pinned summary
+_SUMMARY_PINNED_LIMIT = 20  # max pinned messages checked for the summary
+_SUMMARY_FALLBACK_SCAN = 500  # recent messages scanned for additional guides
 _CACHE_MAX_BYTES = 1024 * 1024 * 1024  # 1GB total limit
 _CACHE_TTL = 86400  # 24 hours
 _PROGRESS_TTL = 2592000  # 30 days
@@ -79,16 +80,18 @@ def extract_tags(text: str) -> List[str]:
     return result
 
 
-def parse_summary(text: str) -> List[Dict[str, Any]]:
-    """Parse the channel summary ('= Módulo', '== Subtópico', '#F01 #F02 ...')
-    into a hierarchical structure of modules with subtopics and their tags.
-    Tags placed directly under a module (without a '==' subtopic) become a flat
-    subtopic named after the module."""
+def _parse_summary_impl(text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Parse a summary text into (modules, leading_tags).
+
+    Modules keep empty subtopic lists (a module without any tags is preserved so
+    later guide continuations can attach their leading tag lines to it)."""
     if not text:
-        return []
+        return [], []
     modules: List[Dict[str, Any]] = []
+    leading_tags: List[str] = []
     current_module: Optional[Dict[str, Any]] = None
     current_subtopic: Optional[Dict[str, Any]] = None
+    first_module_yet = False
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
@@ -101,15 +104,18 @@ def parse_summary(text: str) -> List[Dict[str, Any]]:
             current_module = {"name": line.lstrip("=").strip(), "subtopics": [], "_flat_tags": []}
             modules.append(current_module)
             current_subtopic = None
+            first_module_yet = True
         elif line.startswith("#"):
-            if current_module is None:
-                continue
             tags = [t.upper() for t in TAG_PATTERN.findall(line)]
-            if current_subtopic is not None:
+            if not first_module_yet:
+                for tag in tags:
+                    if tag not in leading_tags:
+                        leading_tags.append(tag)
+            elif current_subtopic is not None:
                 for tag in tags:
                     if tag not in current_subtopic["tags"]:
                         current_subtopic["tags"].append(tag)
-            else:
+            elif current_module is not None:
                 for tag in tags:
                     if tag not in current_module["_flat_tags"]:
                         current_module["_flat_tags"].append(tag)
@@ -125,9 +131,29 @@ def parse_summary(text: str) -> List[Dict[str, Any]]:
             else:
                 subtopics = [flat]
         module["subtopics"] = subtopics
-        if subtopics:
-            result.append(module)
-    return result
+        result.append(module)
+    return result, leading_tags
+
+
+def parse_summary(text: str) -> List[Dict[str, Any]]:
+    """Parse a summary text into modules (subtopics with tags). Modules without
+    any tags are kept with empty subtopic lists."""
+    modules, _ = _parse_summary_impl(text)
+    return modules
+
+
+def parse_summary_full(text: str) -> Dict[str, Any]:
+    """Parse a summary text into {'modules': [...], 'leading_tags': [...]}."""
+    modules, leading_tags = _parse_summary_impl(text)
+    return {"modules": modules, "leading_tags": leading_tags}
+
+
+def summary_qualifies(modules: List[Dict[str, Any]]) -> bool:
+    """A message is considered a real summary when it has at least 2 headings or
+    at least 3 tags — this filters out ordinary captions/messages."""
+    headings = len(modules) + sum(len(m["subtopics"]) for m in modules)
+    tags = sum(len(s.get("tags") or []) for m in modules for s in m["subtopics"])
+    return headings >= 2 or tags >= 3
 
 
 def _get_video_info(msg: Any) -> Optional[Dict[str, Any]]:
@@ -370,60 +396,37 @@ class VideoService:
         }
 
     async def _resolve_summary(self, entity, channel_id: str) -> List[Dict[str, Any]]:
-        """Find and parse the channel summary. Prefers a pinned message; falls
-        back to scanning recent messages for the summary pattern."""
+        """Find and merge the channel summary. Guides may span multiple messages
+        (e.g. a pinned guide plus a continuation), so all matching messages are
+        collected, ordered by message id and merged."""
         now = time.time()
         cached = self._summary_cache.get(channel_id)
         if cached and now - cached[0] < _SUMMARY_CACHE_TTL:
             return cached[1]
-        summary: List[Dict[str, Any]] = []
+        modules: List[Dict[str, Any]] = []
         if self.client:
-            try:
-                async with self._sem:
-                    async for msg in self.client.iter_messages(
-                        entity,
-                        filter=InputMessagesFilterPinned,
-                        limit=20,
-                    ):
-                        parsed = parse_summary(msg.message or "")
-                        if parsed:
-                            summary = parsed
-                            break
-            except FloodWaitError as e:
-                if e.seconds > 60:
-                    raise HTTPException(
-                        status_code=429,
-                        detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
-                        headers={"Retry-After": str(e.seconds)},
-                    )
-                await asyncio.sleep(e.seconds + 1)
-            except Exception:
-                pass
-            if not summary:
-                summary = await self._scan_summary_fallback(entity)
-        self._summary_cache[channel_id] = (now, summary)
-        return summary
+            candidates = await self._collect_summary_messages(entity)
+            modules = self._merge_summaries(candidates)
+        self._summary_cache[channel_id] = (now, modules)
+        return modules
 
-    async def _scan_summary_fallback(self, entity) -> List[Dict[str, Any]]:
+    async def _collect_summary_messages(self, entity) -> List[Tuple[int, Dict[str, Any]]]:
+        """Collect summary-like messages, deduplicated by message id. Looks at
+        pinned messages first, then scans recent messages for continuations."""
         if not self.client:
             return []
+        found: Dict[int, Dict[str, Any]] = {}
+
         try:
             async with self._sem:
                 async for msg in self.client.iter_messages(
                     entity,
-                    limit=_SUMMARY_FALLBACK_SCAN,
+                    filter=InputMessagesFilterPinned,
+                    limit=_SUMMARY_PINNED_LIMIT,
                 ):
-                    text = msg.message or ""
-                    if not text:
-                        continue
-                    if "sumário" in text.lower() or "sumario" in text.lower() or ("#" in text and "=" in text):
-                        parsed = parse_summary(text)
-                        if not parsed:
-                            continue
-                        headings = sum(1 for m in parsed for _ in m["subtopics"]) + len(parsed)
-                        tags = sum(len(s["tags"]) for m in parsed for s in m["subtopics"])
-                        if headings >= 2 or tags >= 3:
-                            return parsed
+                    full = parse_summary_full(msg.message or "")
+                    if summary_qualifies(full["modules"]):
+                        found[msg.id] = full
         except FloodWaitError as e:
             if e.seconds > 60:
                 raise HTTPException(
@@ -434,7 +437,58 @@ class VideoService:
             await asyncio.sleep(e.seconds + 1)
         except Exception:
             pass
-        return []
+
+        try:
+            async with self._sem:
+                async for msg in self.client.iter_messages(
+                    entity,
+                    limit=_SUMMARY_FALLBACK_SCAN,
+                ):
+                    if msg.id in found:
+                        continue
+                    text = msg.message or ""
+                    if not text:
+                        continue
+                    if "sumário" in text.lower() or "sumario" in text.lower() or ("#" in text and "=" in text):
+                        full = parse_summary_full(text)
+                        if summary_qualifies(full["modules"]):
+                            found[msg.id] = full
+        except FloodWaitError as e:
+            if e.seconds > 60:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"FloodWait: aguarde {e.seconds} segundos antes de tentar novamente",
+                    headers={"Retry-After": str(e.seconds)},
+                )
+            await asyncio.sleep(e.seconds + 1)
+        except Exception:
+            pass
+
+        return [(mid, found[mid]) for mid in sorted(found)]
+
+    @staticmethod
+    def _merge_summaries(candidates: List[Tuple[int, Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """Merge summary candidates in message-id order. Duplicate module names are
+        kept only once; leading tag lines of a continuation are attached to the last
+        module that has no tags yet (e.g. the module that closes the previous guide)."""
+        merged: List[Dict[str, Any]] = []
+        seen = set()
+        for _, full in candidates:
+            leading_tags = full.get("leading_tags") or []
+            if leading_tags and merged:
+                last = merged[-1]
+                if not last["subtopics"]:
+                    last["subtopics"] = [{
+                        "name": last["name"],
+                        "tags": leading_tags,
+                        "flat": True,
+                    }]
+            for module in full["modules"]:
+                if module["name"] in seen:
+                    continue
+                seen.add(module["name"])
+                merged.append(module)
+        return merged
 
     async def _scan_videos(self, entity, channel_id: str, summary: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Enumerate all videos in the channel using the server-side video filter,
