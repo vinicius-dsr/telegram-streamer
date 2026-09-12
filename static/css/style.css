@@ -648,6 +648,9 @@ html, body {
 .player-wrapper {
     flex: 1;
     min-width: 0;
+    position: relative;
+    aspect-ratio: 16 / 9;
+    max-height: 70vh;
     background: #000;
     border-radius: var(--radius);
     overflow: hidden;
@@ -655,7 +658,21 @@ html, body {
 
 .player-wrapper video {
     width: 100%;
-    max-height: 70vh;
+    height: 100%;
+    display: block;
+}
+
+#artplayer,
+#artplayer .art-video-layer,
+#artplayer .art-video {
+    width: 100%;
+    height: 100%;
+}
+
+#artplayer video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
     display: block;
 }
 

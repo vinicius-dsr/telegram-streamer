@@ -15,13 +15,16 @@
 - **Sessao compartilhada** — reutiliza a sessao do Telegram-Downloader-Tools
 - **2FA** — suporte completo a autenticacao em duas etapas
 - **Cache** — videos sao cacheados por 5 minutos, eliminando escaneamentos repetidos
+- **Player ArtPlayer.js** — player moderno com controles ricos: tela cheia (window/web), picture-in-picture, velocidade de reproducao, screenshot e proporcao de tela
+- **Navegacao no player** — setas de anterior/proximo ao lado do player, seguindo a ordem dos dropdowns (modulo > subtopico), com indicacao da secao ao trocar de agrupamento
+- **Auto-avancar** — ao terminar o video, a seta de proximo mostra o proximo titulo e uma contagem regressiva (10s) para avancar automaticamente; clicando antes pula direto
 - **Retomar playback** — lembra onde voce parou de assistir e retoma automaticamente
 - **Responsivo** — layout adaptavel para desktop, tablet e mobile
 
 ## Stack
 
 - **Backend:** Python 3.14, FastAPI, Telethon, Uvicorn
-- **Frontend:** HTML/CSS/JS vanilla (sem framework)
+- **Frontend:** HTML/CSS/JS vanilla (sem framework) + ArtPlayer.js
 - **Tema:** Netflix dark
 
 ## Instalacao

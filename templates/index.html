@@ -128,9 +128,7 @@
                         </div>
                     </button>
                     <div class="player-wrapper">
-                        <video id="video-player" controls autoplay preload="auto">
-                            Seu navegador nao suporta video.
-                        </video>
+                        <div id="artplayer"></div>
                     </div>
                     <button class="nav-btn nav-next" id="player-next-btn" onclick="player.playNext()" disabled aria-label="Proximo video">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -235,6 +233,7 @@
 
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/artplayer@5.4.0/dist/artplayer.js"></script>
     <script src="/static/js/api.js"></script>
     <script src="/static/js/player.js"></script>
     <script src="/static/js/app.js"></script>

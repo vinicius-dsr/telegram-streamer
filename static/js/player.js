@@ -1,6 +1,5 @@
 class VideoPlayer {
     constructor() {
-        this.video = document.getElementById('video-player');
         this.titleEl = document.getElementById('player-title');
         this.durationEl = document.getElementById('player-duration');
         this.sizeEl = document.getElementById('player-size');
@@ -19,6 +18,7 @@ class VideoPlayer {
         this.countdownNumberEl = document.getElementById('player-countdown-number');
         this.sectionBannerEl = document.getElementById('player-section-banner');
 
+        this.art = null;
         this.currentData = null;
         this._prevEntry = null;
         this._nextEntry = null;
@@ -32,18 +32,53 @@ class VideoPlayer {
         this._RESUME_THRESHOLD = 0.9;
         this._WATCHED_THRESHOLD = 0.9;
         this._COUNTDOWN_CIRC = 2 * Math.PI * 15.5;
+    }
 
-        this.video.addEventListener('error', () => {
+    _ensurePlayer() {
+        if (this.art) return this.art;
+        if (!window.Artplayer) {
+            app.toast('Falha ao carregar o player. Verifique a conexao.', 'error');
+            return null;
+        }
+        const container = document.getElementById('artplayer');
+        if (!container) return null;
+
+        const art = new Artplayer({
+            container: container,
+            url: '',
+            theme: '#e50914',
+            volume: 0.7,
+            autoplay: false,
+            setting: true,
+            playbackRate: true,
+            aspectRatio: true,
+            screenshot: true,
+            pip: true,
+            fullscreen: true,
+            fullscreenWeb: true,
+            hotkey: true,
+            loop: false,
+            autoSize: false,
+            miniProgressBar: true,
+            lang: 'en',
+            moreVideoAttr: {
+                controls: false,
+                preload: 'auto',
+            },
+        });
+        this.art = art;
+
+        art.on('error', () => {
             if (this.currentData) {
                 app.toast('Erro ao reproduzir video. Tente novamente em alguns segundos.', 'error');
                 app.goBack();
             }
         });
 
-        this.video.addEventListener('timeupdate', () => {
+        art.on('video:timeupdate', () => {
             if (!this.currentData || this._watchedMarked) return;
-            const duration = this.video.duration;
-            if (duration > 0 && this.video.currentTime / duration >= this._WATCHED_THRESHOLD) {
+            const duration = art.duration;
+            if (duration > 0 && art.currentTime / duration >= this._WATCHED_THRESHOLD) {
                 this._watchedMarked = true;
                 this._isWatched = true;
                 api.toggleWatched(this.currentData.msg_id).then(() => {
@@ -53,11 +88,11 @@ class VideoPlayer {
             }
         });
 
-        this.video.addEventListener('play', () => {
+        art.on('play', () => {
             this._cancelCountdown();
         });
 
-        this.video.addEventListener('ended', () => {
+        art.on('video:ended', () => {
             if (!this.currentData) return;
             if (!this._watchedMarked) {
                 this._watchedMarked = true;
@@ -71,6 +106,8 @@ class VideoPlayer {
                 this._startCountdown();
             }
         });
+
+        return art;
     }
 
     _updateWatchedBtn() {
@@ -93,6 +130,9 @@ class VideoPlayer {
     }
 
     startPlayback(entry, prevEntry, nextEntry, channel) {
+        const art = this._ensurePlayer();
+        if (!art) return;
+
         this._cancelCountdown();
         this.currentData = entry.video;
         this._prevEntry = prevEntry;
@@ -100,10 +140,6 @@ class VideoPlayer {
         this._watchedMarked = false;
         this._isWatched = app.watchedSet.has(entry.video.msg_id);
         this._stopAutoSave();
-
-        const url = api.streamUrl(entry.video.msg_id, channel);
-        this.video.src = url;
-        this.video.load();
 
         this.titleEl.textContent = entry.video.title || 'Sem titulo';
         this.durationEl.textContent = entry.video.duration || '';
@@ -115,28 +151,27 @@ class VideoPlayer {
         this._updateNav();
         this._showSectionBanner(entry.section, prevEntry ? prevEntry.section : '');
 
-        const onCanPlay = () => {
-            this.video.removeEventListener('canplay', onCanPlay);
+        const url = api.streamUrl(entry.video.msg_id, channel);
+        art.switchUrl(url);
+
+        art.once('video:canplay', () => {
             this._startAutoSave(entry.video.msg_id);
-        };
-        this.video.addEventListener('canplay', onCanPlay);
+        });
 
         api.getProgress(entry.video.msg_id).then(result => {
             const savedTime = result.time;
             if (savedTime && savedTime > 5) {
-                const seek = () => {
-                    this.video.removeEventListener('canplay', seek);
-                    const duration = this.video.duration;
+                art.once('video:canplay', () => {
+                    const duration = art.duration;
                     if (duration > 0 && savedTime / duration < this._RESUME_THRESHOLD) {
-                        this.video.currentTime = savedTime;
+                        art.currentTime = savedTime;
                         app.toast(`Retomando de ${formatTime(savedTime)}`, 'info');
                     }
-                };
-                this.video.addEventListener('canplay', seek);
+                });
             }
-            this.video.play().catch(() => {});
+            Promise.resolve(art.play()).catch(() => {});
         }).catch(() => {
-            this.video.play().catch(() => {});
+            Promise.resolve(art.play()).catch(() => {});
         });
     }
 
@@ -226,8 +261,9 @@ class VideoPlayer {
     _startAutoSave(msgId) {
         this._stopAutoSave();
         this._saveInterval = setInterval(() => {
-            if (this.video.currentTime > 0 && !this.video.paused) {
-                api.saveProgress(msgId, this.video.currentTime).catch(() => {});
+            const art = this.art;
+            if (art && art.currentTime > 0 && art.playing) {
+                api.saveProgress(msgId, art.currentTime).catch(() => {});
             }
         }, 5000);
     }
@@ -242,12 +278,10 @@ class VideoPlayer {
     stop() {
         this._cancelCountdown();
         this._stopAutoSave();
-        if (this.currentData && this.video.currentTime > 5) {
-            api.saveProgress(this.currentData.msg_id, this.video.currentTime).catch(() => {});
+        if (this.art && this.art.currentTime > 5 && this.currentData) {
+            api.saveProgress(this.currentData.msg_id, this.art.currentTime).catch(() => {});
         }
-        this.video.pause();
-        this.video.removeAttribute('src');
-        this.video.load();
+        if (this.art) this.art.pause();
         this.currentData = null;
         this._prevEntry = null;
         this._nextEntry = null;
