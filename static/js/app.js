@@ -8,6 +8,8 @@ class App {
         this.loginPhone = '';
         this.watchedSet = new Set();
         this.summary = null;
+        this.playlist = [];
+        this.playlistIndex = -1;
     }
 
     async init() {
@@ -169,6 +171,7 @@ class App {
             this.allVideos = videos;
             this.summary = summary;
             this.filteredVideos = [...this.allVideos];
+            this.buildPlaylist();
             await this.loadWatched();
             this.applyFilters();
         } catch (e) {
@@ -176,6 +179,56 @@ class App {
         } finally {
             this.showLoading(false);
         }
+    }
+
+    buildPlaylist() {
+        const videos = this.allVideos || [];
+        const summary = this.summary;
+        const playlist = [];
+        const hasSummary = summary &&
+            summary.has_summary &&
+            Array.isArray(summary.modules) &&
+            summary.modules.length > 0;
+
+        if (!hasSummary) {
+            videos.forEach(v => playlist.push({ video: v, section: '' }));
+            this.playlist = playlist;
+            return;
+        }
+
+        const byKey = new Map();
+        const others = [];
+        for (const v of videos) {
+            if (typeof v.module_idx === 'number' && v.module_idx >= 0 &&
+                typeof v.subtopic_idx === 'number' && v.subtopic_idx >= 0) {
+                const key = v.module_idx + ':' + v.subtopic_idx;
+                if (!byKey.has(key)) byKey.set(key, []);
+                byKey.get(key).push(v);
+            } else {
+                others.push(v);
+            }
+        }
+
+        summary.modules.forEach((mod, mi) => {
+            const sections = [];
+            mod.subtopics.forEach((sub, si) => {
+                const subVideos = byKey.get(mi + ':' + si);
+                if (subVideos && subVideos.length > 0) {
+                    sections.push({ sub, videos: subVideos });
+                }
+            });
+            if (sections.length === 0) return;
+            sections.forEach(({ sub, videos: subVideos }) => {
+                const section = `${mod.name} \u00bb ${sub.name}`;
+                subVideos.forEach(v => playlist.push({ video: v, section }));
+            });
+        });
+
+        if (others.length > 0) {
+            others.forEach(v => playlist.push({ video: v, section: 'Outros' }));
+        }
+
+        this.playlist = playlist;
     }
 
     async loadWatched() {
@@ -361,13 +414,30 @@ class App {
     }
 
     async playVideo(msgId) {
-        try {
-            const video = await api.getVideo(msgId, this.currentChannel);
-            this.showPage('player');
-            player.play(video, this.currentChannel);
-        } catch (e) {
-            this.toast('Erro ao carregar video: ' + e.message, 'error');
+        if (this.playlist.length === 0) this.buildPlaylist();
+        let index = this.playlist.findIndex(p => p.video.msg_id === msgId);
+        if (index === -1) {
+            try {
+                const video = await api.getVideo(msgId, this.currentChannel);
+                this.playlist.push({ video, section: '' });
+                index = this.playlist.length - 1;
+            } catch (e) {
+                this.toast('Erro ao carregar video: ' + e.message, 'error');
+                return;
+            }
         }
+        this.playVideoAt(index);
+    }
+
+    playVideoAt(index) {
+        if (index < 0 || index >= this.playlist.length) return;
+        const entry = this.playlist[index];
+        const prevEntry = index > 0 ? this.playlist[index - 1] : null;
+        const nextEntry = index < this.playlist.length - 1 ? this.playlist[index + 1] : null;
+        this.playlistIndex = index;
+        this.showPage('player');
+        player.startPlayback(entry, prevEntry, nextEntry, this.currentChannel);
+        if (nextEntry) this.prefetchVideo(nextEntry.video.msg_id);
     }
 
     goBack() {

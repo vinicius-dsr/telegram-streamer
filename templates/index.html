@@ -116,11 +116,44 @@
                         <span id="player-watched-label">Marcar como assistido</span>
                     </button>
                 </div>
-                <div class="player-wrapper">
-                    <video id="video-player" controls autoplay preload="auto">
-                        Seu navegador nao suporta video.
-                    </video>
+                <div class="player-row">
+                    <button class="nav-btn nav-prev" id="player-prev-btn" onclick="player.playPrev()" disabled aria-label="Video anterior">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 18 9 12 15 6"/>
+                        </svg>
+                        <div class="nav-popup prev-popup">
+                            <div class="nav-popup-label">Anterior</div>
+                            <div class="nav-popup-title" id="player-prev-title"></div>
+                            <div class="nav-popup-section" id="player-prev-section"></div>
+                        </div>
+                    </button>
+                    <div class="player-wrapper">
+                        <video id="video-player" controls autoplay preload="auto">
+                            Seu navegador nao suporta video.
+                        </video>
+                    </div>
+                    <button class="nav-btn nav-next" id="player-next-btn" onclick="player.playNext()" disabled aria-label="Proximo video">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                        <div class="nav-popup next-popup">
+                            <div class="nav-popup-label">Proximo</div>
+                            <div class="nav-popup-title" id="player-next-title"></div>
+                            <div class="nav-popup-section" id="player-next-section"></div>
+                            <div class="nav-countdown" id="player-next-countdown" style="display:none">
+                                <span class="countdown-ring">
+                                    <svg width="34" height="34" viewBox="0 0 36 36">
+                                        <circle class="countdown-track" cx="18" cy="18" r="15.5"/>
+                                        <circle class="countdown-bar" id="countdown-bar" cx="18" cy="18" r="15.5"/>
+                                    </svg>
+                                    <span class="countdown-number" id="player-countdown-number">10</span>
+                                </span>
+                                <span class="countdown-text">Proximo automaticamente</span>
+                            </div>
+                        </div>
+                    </button>
                 </div>
+                <div id="player-section-banner" class="player-section-banner" style="display:none"></div>
                 <div class="player-info">
                     <h2 id="player-title"></h2>
                     <div class="player-meta">
